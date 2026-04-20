@@ -30,7 +30,13 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Core sync/browse/restore logic lives in a module with a public TypeScript API — no CLI imports in core
   3. The CLI layer imports core and wraps it — core functions are callable without the CLI
   4. Synthetic `.eml` fixtures are committed to the repo and loaded in test setup with no real email present
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Project config (package.json, tsconfig.json, vitest configs, npm install)
+- [ ] 01-02-PLAN.md — Source modules and fixtures (src/core/index.ts, src/cli/index.ts, tests/fixtures/*.eml)
+- [ ] 01-03-PLAN.md — Unit tests (ARCH-01/02 boundary tests, TEST-03 fixture validation, npm test green)
+- [ ] 01-04-PLAN.md — Integration infra (docker-compose.yml, test-integration.sh, imap-connect test, npm run test:integration green)
 
 ### Phase 2: Configuration
 **Goal**: Users can configure named IMAP accounts with secure credentials and the CLI resolves config from the correct OS path
@@ -95,7 +101,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/? | Not started | - |
+| 1. Foundation | 0/4 | Not started | - |
 | 2. Configuration | 0/? | Not started | - |
 | 3. Sync | 0/? | Not started | - |
 | 4. Browse | 0/? | Not started | - |
