@@ -1,0 +1,9 @@
+From: test@example.com
+To: recipient@example.com
+Subject: Test fixture 001
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+Message-ID: <fixture-001@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain
+
+This is a synthetic test fixture. No real email content.
