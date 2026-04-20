@@ -12,7 +12,7 @@ backmail is a TypeScript CLI that backs up IMAP mailboxes to git repos. The path
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation** - Project scaffold, clean module architecture, and integration test infrastructure
+- [x] **Phase 1: Foundation** - Project scaffold, clean module architecture, and integration test infrastructure *(completed 2026-04-20)*
 - [ ] **Phase 2: Configuration** - IMAP account config with OS-aware paths and secure credential storage
 - [ ] **Phase 3: Sync** - Incremental IMAP fetch writing `.eml` files and committing deltas to git
 - [ ] **Phase 4: Browse** - Read-only navigation of backup history via log, checkout, ls, and view commands
@@ -33,10 +33,10 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 4 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Project config (package.json, tsconfig.json, vitest configs, npm install)
-- [ ] 01-02-PLAN.md — Source modules and fixtures (src/core/index.ts, src/cli/index.ts, tests/fixtures/*.eml)
-- [ ] 01-03-PLAN.md — Unit tests (ARCH-01/02 boundary tests, TEST-03 fixture validation, npm test green)
-- [ ] 01-04-PLAN.md — Integration infra (docker-compose.yml, test-integration.sh, imap-connect test, npm run test:integration green)
+- [x] 01-01-PLAN.md — Project config (package.json, tsconfig.json, vitest configs, npm install)
+- [x] 01-02-PLAN.md — Source modules and fixtures (src/core/index.ts, src/cli/index.ts, tests/fixtures/*.eml)
+- [x] 01-03-PLAN.md — Unit tests (ARCH-01/02 boundary tests, TEST-03 fixture validation, npm test green)
+- [x] 01-04-PLAN.md — Integration infra (docker-compose.yml, test-integration.sh, imap-connect test, npm run test:integration green)
 
 ### Phase 2: Configuration
 **Goal**: Users can configure named IMAP accounts with secure credentials and the CLI resolves config from the correct OS path
@@ -101,7 +101,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/4 | Not started | - |
+| 1. Foundation | 4/4 | Complete | 2026-04-20 |
 | 2. Configuration | 0/? | Not started | - |
 | 3. Sync | 0/? | Not started | - |
 | 4. Browse | 0/? | Not started | - |
