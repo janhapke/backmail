@@ -1,0 +1,30 @@
+{
+  "name": "backmail",
+  "version": "0.1.0",
+  "description": "Mirror IMAP mailboxes to git",
+  "type": "module",
+  "bin": {
+    "backmail": "./dist/cli/index.js"
+  },
+  "main": "./dist/core/index.js",
+  "exports": {
+    ".": "./dist/core/index.js"
+  },
+  "scripts": {
+    "dev": "tsx src/cli/index.ts",
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "bash scripts/test-integration.sh",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "25.6.0",
+    "tsx": "4.21.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.4"
+  },
+  "dependencies": {
+    "commander": "14.0.3"
+  }
+}
