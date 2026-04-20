@@ -1,0 +1,11 @@
+# docker-compose.yml
+# Test infrastructure only — not used in production.
+# Image: gmitirol/minimal-imap:v1 (Alpine + Dovecot, 30.7 MB, port 143)
+# Credentials: testuser / testpass (set via IMAP_USERS env var)
+services:
+  imap:
+    image: gmitirol/minimal-imap:v1
+    ports:
+      - "143:143"
+    environment:
+      IMAP_USERS: "testuser:testpass"
