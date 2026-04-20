@@ -14,7 +14,7 @@ echo "Starting IMAP container..."
 docker compose up -d
 
 echo "Waiting for IMAP to be ready on port 143..."
-timeout 60 bash -c 'until docker compose exec -T imap nc -z localhost 143 2>/dev/null; do sleep 1; done'
+timeout 60 bash -c 'until bash -c "</dev/tcp/localhost/143" 2>/dev/null; do sleep 1; done'
 
 echo "Running integration tests..."
 npx vitest run --config vitest.integration.config.ts
