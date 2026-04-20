@@ -83,37 +83,37 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CONFIG-01 | — | Pending |
-| CONFIG-02 | — | Pending |
-| CONFIG-03 | — | Pending |
-| SYNC-01 | — | Pending |
-| SYNC-02 | — | Pending |
-| SYNC-03 | — | Pending |
-| SYNC-04 | — | Pending |
-| SYNC-05 | — | Pending |
-| SYNC-06 | — | Pending |
-| BROW-01 | — | Pending |
-| BROW-02 | — | Pending |
-| BROW-03 | — | Pending |
-| BROW-04 | — | Pending |
-| REST-01 | — | Pending |
-| REST-02 | — | Pending |
-| REST-03 | — | Pending |
-| REST-04 | — | Pending |
-| PKG-01 | — | Pending |
-| PKG-02 | — | Pending |
-| PKG-03 | — | Pending |
-| ARCH-01 | — | Pending |
-| ARCH-02 | — | Pending |
-| TEST-01 | — | Pending |
-| TEST-02 | — | Pending |
-| TEST-03 | — | Pending |
+| ARCH-01 | Phase 1 | Pending |
+| ARCH-02 | Phase 1 | Pending |
+| TEST-01 | Phase 1 | Pending |
+| TEST-02 | Phase 1 | Pending |
+| TEST-03 | Phase 1 | Pending |
+| CONFIG-01 | Phase 2 | Pending |
+| CONFIG-02 | Phase 2 | Pending |
+| CONFIG-03 | Phase 2 | Pending |
+| SYNC-01 | Phase 3 | Pending |
+| SYNC-02 | Phase 3 | Pending |
+| SYNC-03 | Phase 3 | Pending |
+| SYNC-04 | Phase 3 | Pending |
+| SYNC-05 | Phase 3 | Pending |
+| SYNC-06 | Phase 3 | Pending |
+| BROW-01 | Phase 4 | Pending |
+| BROW-02 | Phase 4 | Pending |
+| BROW-03 | Phase 4 | Pending |
+| BROW-04 | Phase 4 | Pending |
+| REST-01 | Phase 5 | Pending |
+| REST-02 | Phase 5 | Pending |
+| REST-03 | Phase 5 | Pending |
+| REST-04 | Phase 5 | Pending |
+| PKG-01 | Phase 6 | Pending |
+| PKG-02 | Phase 6 | Pending |
+| PKG-03 | Phase 6 | Pending |
 
 **Coverage:**
 - v1 requirements: 25 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 25 ⚠️
+- Mapped to phases: 25
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-04-20*
-*Last updated: 2026-04-20 after initial definition*
+*Last updated: 2026-04-20 after roadmap creation*
