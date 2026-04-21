@@ -13,10 +13,12 @@ import { getConfigPath, loadConfig, getPassword } from '../../src/core/config.js
 // ---------------------------------------------------------------------------
 vi.mock('@napi-rs/keyring', () => {
   const mockGetPassword = vi.fn()
+  // Use a regular function (not arrow) so that `new Entry(...)` works in Vitest 4.x.
+  // Arrow functions cannot be used as constructors (Reflect.construct requirement).
   return {
-    Entry: vi.fn().mockImplementation(() => ({
-      getPassword: mockGetPassword,
-    })),
+    Entry: vi.fn().mockImplementation(function () {
+      return { getPassword: mockGetPassword }
+    }),
     _mockGetPassword: mockGetPassword,
   }
 })

@@ -23,3 +23,7 @@ export interface AccountConfig {
 export async function ping(_config: AccountConfig): Promise<boolean> {
   throw new Error('Not implemented')
 }
+
+// Phase 2: Config module public API
+export type { BackmailConfig } from './config.js'
+export { getConfigPath, loadConfig, getPassword } from './config.js'
