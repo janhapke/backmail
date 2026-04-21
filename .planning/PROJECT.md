@@ -14,7 +14,7 @@ The git repo IS the backup — point-in-time restore, local search, and provider
 
 ### Validated
 
-(None yet — ship to validate)
+- [x] User can configure one or more IMAP accounts in `~/.config/backmail/config.json` (OS-appropriate path) — Validated in Phase 2: Configuration
 
 ### Active
 
@@ -86,4 +86,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-20 after initialization*
+*Last updated: 2026-04-21 — Phase 2 complete (config module, CLI wiring, credential storage)*
