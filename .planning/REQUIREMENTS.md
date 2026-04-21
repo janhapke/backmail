@@ -7,9 +7,9 @@
 
 ### Configuration
 
-- [ ] **CONFIG-01**: User can configure named IMAP accounts in the OS-appropriate config dir (`~/.config/backmail/` on Linux, `~/Library/Application Support/backmail/` on macOS, `%APPDATA%\backmail\` on Windows)
-- [ ] **CONFIG-02**: Config supports multiple named accounts, each with IMAP host, port, username, TLS settings, and git repo path
-- [ ] **CONFIG-03**: Credentials stored in OS keyring (via keytar) when available; falls back to `BACKMAIL_PASSWORD` / `BACKMAIL_<ACCOUNT>_PASSWORD` environment variables for headless/server use
+- [x] **CONFIG-01**: User can configure named IMAP accounts in the OS-appropriate config dir (`~/.config/backmail/` on Linux, `~/Library/Application Support/backmail/` on macOS, `%APPDATA%\backmail\` on Windows)
+- [x] **CONFIG-02**: Config supports multiple named accounts, each with IMAP host, port, username, TLS settings, and git repo path
+- [x] **CONFIG-03**: Credentials stored in OS keyring (via keytar) when available; falls back to `BACKMAIL_PASSWORD` / `BACKMAIL_<ACCOUNT>_PASSWORD` environment variables for headless/server use
 ### Sync
 
 - [ ] **SYNC-01**: `backmail sync [<account>]` performs incremental IMAP fetch, writes new `.eml` files, updates folder JSONs, and commits a delta to the git repo
@@ -88,9 +88,9 @@
 | TEST-01 | Phase 1 | Pending |
 | TEST-02 | Phase 1 | Pending |
 | TEST-03 | Phase 1 | Pending |
-| CONFIG-01 | Phase 2 | Pending |
-| CONFIG-02 | Phase 2 | Pending |
-| CONFIG-03 | Phase 2 | Pending |
+| CONFIG-01 | Phase 2 | Complete |
+| CONFIG-02 | Phase 2 | Complete |
+| CONFIG-03 | Phase 2 | Complete |
 | SYNC-01 | Phase 3 | Pending |
 | SYNC-02 | Phase 3 | Pending |
 | SYNC-03 | Phase 3 | Pending |

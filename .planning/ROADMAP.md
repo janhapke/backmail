@@ -13,7 +13,7 @@ backmail is a TypeScript CLI that backs up IMAP mailboxes to git repos. The path
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation** - Project scaffold, clean module architecture, and integration test infrastructure *(completed 2026-04-20)*
-- [ ] **Phase 2: Configuration** - IMAP account config with OS-aware paths and secure credential storage
+- [x] **Phase 2: Configuration** - IMAP account config with OS-aware paths and secure credential storage *(completed 2026-04-21)*
 - [ ] **Phase 3: Sync** - Incremental IMAP fetch writing `.eml` files and committing deltas to git
 - [ ] **Phase 4: Browse** - Read-only navigation of backup history via log, checkout, ls, and view commands
 - [ ] **Phase 5: Restore** - Re-upload messages from a checkout to a target IMAP server
@@ -49,9 +49,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Dependencies + test scaffold (npm install @napi-rs/keyring zod, failing config.test.ts stubs)
-- [ ] 02-02-PLAN.md — Core config module (src/core/config.ts: OS paths, Zod validation, loadConfig, getPassword; re-exports via src/core/index.ts)
-- [ ] 02-03-PLAN.md — CLI wiring + boundary tests (loadConfig in src/cli/index.ts, extended ARCH-01 tests for config.ts)
+- [x] 02-01-PLAN.md — Dependencies + test scaffold (npm install @napi-rs/keyring zod, failing config.test.ts stubs)
+- [x] 02-02-PLAN.md — Core config module (src/core/config.ts: OS paths, Zod validation, loadConfig, getPassword; re-exports via src/core/index.ts)
+- [x] 02-03-PLAN.md — CLI wiring + boundary tests (loadConfig in src/cli/index.ts, extended ARCH-01 tests for config.ts)
 
 ### Phase 3: Sync
 **Goal**: Users can run `backmail sync` to incrementally fetch new mail, mirror deletions, and commit a labelled delta to the git repo
@@ -107,7 +107,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 4/4 | Complete | 2026-04-20 |
-| 2. Configuration | 0/3 | Not started | - |
+| 2. Configuration | 3/3 | Complete | 2026-04-21 |
 | 3. Sync | 0/? | Not started | - |
 | 4. Browse | 0/? | Not started | - |
 | 5. Restore | 0/? | Not started | - |
