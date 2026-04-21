@@ -42,3 +42,41 @@ describe('ARCH-02: cli/core module boundary enforcement', () => {
     expect(cliSource).not.toMatch(/from ['"]\.\.\/cli\//)
   })
 })
+
+describe('ARCH-01: src/core/config.ts module boundary enforcement', () => {
+  it('src/core/config.ts does not import from src/cli/', () => {
+    const configSource = readFileSync(
+      resolve(__dirname, '../../src/core/config.ts'),
+      'utf-8'
+    )
+    expect(configSource).not.toMatch(/from ['"]\.\.\/cli\//)
+    expect(configSource).not.toMatch(/from ['"].*\/cli\//)
+    expect(configSource).not.toMatch(/require\(.*cli/)
+  })
+
+  it('src/core/config.ts does not call process.exit()', () => {
+    const configSource = readFileSync(
+      resolve(__dirname, '../../src/core/config.ts'),
+      'utf-8'
+    )
+    expect(configSource).not.toMatch(/process\.exit/)
+  })
+
+  it('src/core/config.ts does not call console methods', () => {
+    const configSource = readFileSync(
+      resolve(__dirname, '../../src/core/config.ts'),
+      'utf-8'
+    )
+    expect(configSource).not.toMatch(/console\.(log|error|warn|info|debug)/)
+  })
+
+  it('src/core/config.ts does not import from the archived keytar package', () => {
+    const configSource = readFileSync(
+      resolve(__dirname, '../../src/core/config.ts'),
+      'utf-8'
+    )
+    // Must use @napi-rs/keyring (the maintained replacement), never the archived keytar
+    expect(configSource).not.toMatch(/from ['"]keytar['"]/)
+    expect(configSource).not.toMatch(/require\(['"]keytar['"]\)/)
+  })
+})

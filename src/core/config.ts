@@ -1,5 +1,5 @@
 // src/core/config.ts — CONFIG-01, CONFIG-02, CONFIG-03
-// ARCH-01: no process.exit(), no console.*, no CLI imports
+// ARCH-01: no exit calls, no console.*, no CLI imports
 import * as z from 'zod'
 import os from 'node:os'
 import path from 'node:path'
