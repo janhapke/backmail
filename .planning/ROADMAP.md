@@ -46,7 +46,12 @@ Plans:
   1. Config file is read from `~/.config/backmail/` on Linux, `~/Library/Application Support/backmail/` on macOS, and `%APPDATA%\backmail\` on Windows
   2. A config file with multiple named accounts (host, port, username, TLS, git repo path) is parsed correctly
   3. Credentials are retrieved from the OS keyring when available; fallback to `BACKMAIL_PASSWORD` / `BACKMAIL_<ACCOUNT>_PASSWORD` env vars works for headless use
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — Dependencies + test scaffold (npm install @napi-rs/keyring zod, failing config.test.ts stubs)
+- [ ] 02-02-PLAN.md — Core config module (src/core/config.ts: OS paths, Zod validation, loadConfig, getPassword; re-exports via src/core/index.ts)
+- [ ] 02-03-PLAN.md — CLI wiring + boundary tests (loadConfig in src/cli/index.ts, extended ARCH-01 tests for config.ts)
 
 ### Phase 3: Sync
 **Goal**: Users can run `backmail sync` to incrementally fetch new mail, mirror deletions, and commit a labelled delta to the git repo
@@ -102,7 +107,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 4/4 | Complete | 2026-04-20 |
-| 2. Configuration | 0/? | Not started | - |
+| 2. Configuration | 0/3 | Not started | - |
 | 3. Sync | 0/? | Not started | - |
 | 4. Browse | 0/? | Not started | - |
 | 5. Restore | 0/? | Not started | - |
