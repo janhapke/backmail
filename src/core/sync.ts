@@ -275,11 +275,11 @@ async function syncFolder(
   const lock = await client.getMailboxLock(folder.path)
   try {
     // Type guard: mailbox should exist after lock is acquired
-    if (client.mailbox === false) {
+    if (!client.mailbox || typeof client.mailbox === 'boolean') {
       throw new Error(`Failed to access mailbox: ${folder.path}`)
     }
-    const serverValidity = client.mailbox.uidValidity
-    const serverUidNext = client.mailbox.uidNext
+    const serverValidity = client.mailbox.uidValidity ?? 0n // Fallback if undefined
+    const serverUidNext = client.mailbox.uidNext ?? 0
 
     // Check for uidvalidity change (SYNC-05): triggers full re-sync
     if (storedState) {
