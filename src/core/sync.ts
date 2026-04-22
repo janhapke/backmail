@@ -235,8 +235,14 @@ export async function syncAccount(
   const git = simpleGit(config.repoPath)
   const status = await git.status()
   if (!status.isClean()) {
-    await git.add('.')
-    await git.commit(formatCommitMessage(added, removed, partial))
+    try {
+      await git.add('.')
+      await git.commit(formatCommitMessage(added, removed, partial))
+    } catch {
+      // Log commit failure but don't crash — caller gets partial result
+      // The working directory still has the files; user can commit manually
+      partial = true // Mark as partial sync to signal incomplete state
+    }
   }
 
   return { added, removed, partial, repoInitialized, folderResults }
