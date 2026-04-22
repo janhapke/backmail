@@ -99,7 +99,7 @@ export async function getPassword(accountName: string): Promise<string> {
     const entry = new Entry('backmail', accountName)
     const result = entry.getPassword()
     // Wrap in await in case the test shim or platform returns a Promise
-    password = result instanceof Promise ? await result : result
+    password = result && typeof (result as any).then === 'function' ? await (result as any) : (result as string)
   } catch {
     // keyring unavailable (headless Linux, no D-Bus/GNOME Keyring) — fall through
   }
