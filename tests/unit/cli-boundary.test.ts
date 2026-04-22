@@ -80,3 +80,39 @@ describe('ARCH-01: src/core/config.ts module boundary enforcement', () => {
     expect(configSource).not.toMatch(/require\(['"]keytar['"]\)/)
   })
 })
+
+describe('ARCH-01: src/core/sync.ts module boundary enforcement', () => {
+  it('src/core/sync.ts does not import from src/cli/', () => {
+    const syncSource = readFileSync(
+      resolve(__dirname, '../../src/core/sync.ts'),
+      'utf-8'
+    )
+    expect(syncSource).not.toMatch(/from ['"]\.\.\/cli\//)
+    expect(syncSource).not.toMatch(/from ['"].*\/cli\//)
+    expect(syncSource).not.toMatch(/require\(.*cli/)
+  })
+
+  it('src/core/sync.ts does not call process.exit()', () => {
+    const syncSource = readFileSync(
+      resolve(__dirname, '../../src/core/sync.ts'),
+      'utf-8'
+    )
+    expect(syncSource).not.toMatch(/process\.exit/)
+  })
+
+  it('src/core/sync.ts does not call console methods', () => {
+    const syncSource = readFileSync(
+      resolve(__dirname, '../../src/core/sync.ts'),
+      'utf-8'
+    )
+    expect(syncSource).not.toMatch(/console\.(log|error|warn|info|debug)/)
+  })
+
+  it('src/core/sync.ts sets logger: false on ImapFlow (T-3-03)', () => {
+    const syncSource = readFileSync(
+      resolve(__dirname, '../../src/core/sync.ts'),
+      'utf-8'
+    )
+    expect(syncSource).toMatch(/logger:\s*false/)
+  })
+})

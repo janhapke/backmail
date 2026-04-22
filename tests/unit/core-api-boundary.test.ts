@@ -36,3 +36,40 @@ describe('ARCH-01: core module API boundary', () => {
     result.catch(() => {})
   })
 })
+
+describe('Phase 3: sync public API surface', () => {
+  it('exports syncAccount as a function', () => {
+    expect(typeof core.syncAccount).toBe('function')
+  })
+
+  it('SyncResult type is usable (compile-time check)', () => {
+    // If SyncResult is not exported as a type, this assignment fails at tsc.
+    const result: core.SyncResult = {
+      added: 0,
+      removed: 0,
+      partial: false,
+      repoInitialized: false,
+      folderResults: [],
+    }
+    expect(result.added).toBe(0)
+    expect(result.folderResults).toEqual([])
+  })
+
+  it('SyncOptions type is usable (compile-time check)', () => {
+    const opts: core.SyncOptions = {
+      excludeFolders: [],
+      onlyFolders: [],
+      verbose: false,
+    }
+    expect(opts.verbose).toBe(false)
+  })
+
+  it('FolderSyncResult type is usable (compile-time check)', () => {
+    const fr: core.FolderSyncResult = {
+      path: 'INBOX',
+      added: 1,
+      removed: 0,
+    }
+    expect(fr.path).toBe('INBOX')
+  })
+})
