@@ -93,17 +93,24 @@ export function loadConfig(configPath?: string): BackmailConfig {
 // ── Credential lookup (D-07, D-09) ───────────────────────────────────────────
 
 export async function getPassword(accountName: string): Promise<string> {
-  let password: string | null = null
+  let resolvedPassword: string | null = null
   try {
     // Use Entry class (synchronous) — mocked in tests via vi.mock('@napi-rs/keyring')
     const entry = new Entry('backmail', accountName)
     const result = entry.getPassword()
-    // Wrap in await in case the test shim or platform returns a Promise
-    password = result && typeof (result as any).then === 'function' ? await (result as any) : (result as string)
+
+    // Check if result is a Promise
+    if (result && typeof (result as any).then === 'function') {
+      resolvedPassword = await (result as unknown as Promise<string>)
+    } else if (typeof result === 'string') {
+      resolvedPassword = result
+    }
+    // If result is null or undefined, resolvedPassword stays null
   } catch {
     // keyring unavailable (headless Linux, no D-Bus/GNOME Keyring) — fall through
   }
-  if (password !== null) return password
+
+  if (resolvedPassword) return resolvedPassword
 
   // Env var fallback (D-06): BACKMAIL_<ACCOUNT_UPPERCASED>_PASSWORD
   const envKey = `BACKMAIL_${accountName.toUpperCase()}_PASSWORD`
