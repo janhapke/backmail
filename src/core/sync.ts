@@ -125,8 +125,8 @@ export function filterFolders<T extends { path: string; delimiter: string; flags
   const folderMatches = (folderPath: string, delimiter: string, name: string): boolean => {
     // Exact full-path match
     if (folderPath === name) return true
-    // Leaf-name match
-    if (folderPath.endsWith(delimiter + name)) return true
+    // Leaf-name match (only if delimiter is non-empty)
+    if (delimiter && folderPath.endsWith(delimiter + name)) return true
     return false
   }
 
