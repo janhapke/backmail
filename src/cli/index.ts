@@ -144,4 +144,47 @@ program
     }
   })
 
+// ── Phase 4: checkout subcommand ─────────────────────────────────────────────
+program
+  .command('checkout <date|commit>')
+  .description('Create a git worktree at a point in history')
+  .option('--account <name>', 'account name (optional if single account configured)')
+  .action(async (dateOrHash: string, opts: { account?: string }) => {
+    try {
+      const [, accountConfig] = resolveAccount(config, opts.account)
+      const result = await checkoutCommit(accountConfig.repoPath, dateOrHash)
+      console.log(`Checked out ${dateOrHash} (${result.sha}) → ${result.path}`)
+    } catch (err) {
+      console.error((err as Error).message)
+      process.exit(1)
+    }
+  })
+
+// ── Phase 4: ls subcommand ──────────────────────────────────────────────────
+program
+  .command('ls [folder]')
+  .description('List folders or messages in a folder')
+  .option('--account <name>', 'account name (optional if single account configured)')
+  .action(async (folder: string | undefined, opts: { account?: string }) => {
+    try {
+      const [, accountConfig] = resolveAccount(config, opts.account)
+      if (!folder) {
+        // List folders
+        const folders = await listFolders(accountConfig.repoPath)
+        for (const f of folders) {
+          console.log(f)
+        }
+      } else {
+        // List messages in folder
+        const messages = await listMessages(accountConfig.repoPath, folder)
+        for (const msg of messages) {
+          console.log(`${msg.messageId}\t${msg.date}\t${msg.from}\t${msg.subject}`)
+        }
+      }
+    } catch (err) {
+      console.error((err as Error).message)
+      process.exit(1)
+    }
+  })
+
 program.parse(process.argv)
