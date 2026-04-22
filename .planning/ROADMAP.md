@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation** - Project scaffold, clean module architecture, and integration test infrastructure *(completed 2026-04-20)*
 - [x] **Phase 2: Configuration** - IMAP account config with OS-aware paths and secure credential storage *(completed 2026-04-21)*
-- [ ] **Phase 3: Sync** - Incremental IMAP fetch writing `.eml` files and committing deltas to git
+- [x] **Phase 3: Sync** - Incremental IMAP fetch writing `.eml` files and committing deltas to git *(completed 2026-04-22)*
 - [ ] **Phase 4: Browse** - Read-only navigation of backup history via log, checkout, ls, and view commands
 - [ ] **Phase 5: Restore** - Re-upload messages from a checkout to a target IMAP server
 - [ ] **Phase 6: Packaging** - Cross-platform distribution via npm, npx, and compiled binaries
@@ -63,7 +63,12 @@ Plans:
   3. Each sync produces a git commit with message `YYYY-MM-DD: +N added / -N removed`
   4. A `uidvalidity` change causes a full folder re-sync and is recorded visibly in git history
   5. `backmail sync --all` runs sync for every configured account
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [x] 03-01-PLAN.md — Dependencies + failing test stubs (npm install imapflow simple-git, tests/unit/sync.test.ts + tests/integration/sync.test.ts)
+- [x] 03-02-PLAN.md — Core sync module (src/core/sync.ts: syncAccount + helpers; re-exports via src/core/index.ts)
+- [x] 03-03-PLAN.md — CLI sync subcommand + --all (src/cli/index.ts) and boundary test extensions
 
 ### Phase 4: Browse
 **Goal**: Users can navigate the backup history — listing commits, creating point-in-time worktrees, and reading individual messages
@@ -75,7 +80,12 @@ Plans:
   3. `backmail ls` lists folders; `backmail ls <folder>` lists messages inside that folder
   4. `backmail view <message-id> --format eml` returns raw RFC822; `--format plaintext` extracts the text/plain MIME part; `--format json` returns parsed headers and body parts
 **UI hint**: yes
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Dependencies + failing test stubs (npm install imapflow simple-git, tests/unit/sync.test.ts + tests/integration/sync.test.ts)
+- [ ] 03-02-PLAN.md — Core sync module (src/core/sync.ts: syncAccount + helpers; re-exports via src/core/index.ts)
+- [ ] 03-03-PLAN.md — CLI sync subcommand + --all (src/cli/index.ts) and boundary test extensions
 
 ### Phase 5: Restore
 **Goal**: Users can re-upload messages from a backup checkout to any target IMAP server with duplicate-checking and dry-run support
@@ -86,7 +96,12 @@ Plans:
   2. With `--skip-duplicates=yes` (the default), each message's Message-ID is checked against the target before APPEND and existing messages are skipped
   3. `--dry-run` prints what would be uploaded without connecting to the target for writes
   4. Original folder structure is reproduced on the target after a full restore
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Dependencies + failing test stubs (npm install imapflow simple-git, tests/unit/sync.test.ts + tests/integration/sync.test.ts)
+- [ ] 03-02-PLAN.md — Core sync module (src/core/sync.ts: syncAccount + helpers; re-exports via src/core/index.ts)
+- [ ] 03-03-PLAN.md — CLI sync subcommand + --all (src/cli/index.ts) and boundary test extensions
 
 ### Phase 6: Packaging
 **Goal**: backmail is installable from npm globally and via npx, and self-contained binaries are published for macOS, Windows, and Linux
@@ -97,7 +112,12 @@ Plans:
   2. `npx backmail` runs without a global install
   3. Compiled self-contained binaries work on macOS (x64 + arm64), Windows (x64), and Linux (x64) without Node.js installed
   4. Config path resolution, credential storage, and file path separators behave correctly on all three platforms
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Dependencies + failing test stubs (npm install imapflow simple-git, tests/unit/sync.test.ts + tests/integration/sync.test.ts)
+- [ ] 03-02-PLAN.md — Core sync module (src/core/sync.ts: syncAccount + helpers; re-exports via src/core/index.ts)
+- [ ] 03-03-PLAN.md — CLI sync subcommand + --all (src/cli/index.ts) and boundary test extensions
 
 ## Progress
 
@@ -108,7 +128,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Foundation | 4/4 | Complete | 2026-04-20 |
 | 2. Configuration | 3/3 | Complete | 2026-04-21 |
-| 3. Sync | 0/? | Not started | - |
+| 3. Sync | 3/3 | Complete | 2026-04-22 |
 | 4. Browse | 0/? | Not started | - |
 | 5. Restore | 0/? | Not started | - |
 | 6. Packaging | 0/? | Not started | - |
