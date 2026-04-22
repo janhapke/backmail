@@ -42,7 +42,7 @@ try {
 void config
 
 // ── Phase 3: sync subcommand ─────────────────────────────────────────────────
-import { syncAccount } from '../core/index.js'
+import { syncAccount, getLog, checkoutCommit, listFolders, listMessages, viewMessage, resolveAccount } from '../core/index.js'
 
 function collectRepeatable(value: string, previous: string[]): string[] {
   return [...previous, value]
@@ -111,6 +111,37 @@ program
     }
 
     if (anyFailed) process.exit(1)
+  })
+
+// ── Phase 4: accounts subcommand ─────────────────────────────────────────────
+program
+  .command('accounts')
+  .description('List all configured IMAP accounts')
+  .action(() => {
+    const names = Object.keys(config.accounts)
+    for (const name of names) {
+      console.log(name)
+    }
+  })
+
+// ── Phase 4: log subcommand ─────────────────────────────────────────────────
+program
+  .command('log')
+  .description('Show git commit history for account')
+  .option('--account <name>', 'account name (optional if single account configured)')
+  .option('--limit <n>', 'number of commits to show (or "unlimited")', '20')
+  .action(async (opts: { account?: string; limit: string }) => {
+    try {
+      const [, accountConfig] = resolveAccount(config, opts.account)
+      const limitValue = opts.limit === 'unlimited' ? 'unlimited' : parseInt(opts.limit, 10)
+      const commits = await getLog(accountConfig.repoPath, limitValue)
+      for (const msg of commits) {
+        console.log(msg)
+      }
+    } catch (err) {
+      console.error((err as Error).message)
+      process.exit(1)
+    }
   })
 
 program.parse(process.argv)
