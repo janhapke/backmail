@@ -276,17 +276,36 @@ async function syncFolder(
     const serverUidNext = client.mailbox.uidNext
 
     // Check for uidvalidity change (SYNC-05): triggers full re-sync
-    if (storedState && BigInt(storedState.uidvalidity) !== serverValidity) {
-      // uidvalidity changed: delete all local messages and re-sync everything
-      if (storedState.messages.length > 0) {
-        for (const msg of storedState.messages) {
-          const safeId = sanitizeMessageId(msg['message-id'])
-          const msgPath = path.join(repoPath, 'messages', `${safeId}.eml`)
-          await fs.unlink(msgPath).catch(() => {})
+    if (storedState) {
+      let storedValidity: bigint | null = null
+      try {
+        storedValidity = BigInt(storedState.uidvalidity)
+      } catch {
+        // Corrupted state file — treat as uidvalidity change (full re-sync)
+        if (storedState.messages.length > 0) {
+          for (const msg of storedState.messages) {
+            const safeId = sanitizeMessageId(msg['message-id'])
+            const msgPath = path.join(repoPath, 'messages', `${safeId}.eml`)
+            await fs.unlink(msgPath).catch(() => {})
+          }
+          removed += storedState.messages.length
         }
-        removed += storedState.messages.length
+        storedState = null
       }
-      storedState = null
+      if (storedState && storedValidity !== null && storedValidity !== serverValidity) {
+        // uidvalidity changed: invalidate all local state.
+        // Delete all stored messages and treat as a fresh sync.
+        if (storedState.messages.length > 0) {
+          for (const msg of storedState.messages) {
+            const safeId = sanitizeMessageId(msg['message-id'])
+            const msgPath = path.join(repoPath, 'messages', `${safeId}.eml`)
+            await fs.unlink(msgPath).catch(() => {})
+          }
+          removed += storedState.messages.length
+        }
+        // Reset state: existing messages become empty, forcing full re-fetch
+        storedState = null
+      }
     }
 
     // Calculate fetch range (SYNC-01): fetch only new messages
