@@ -31,3 +31,14 @@ export { getConfigPath, loadConfig, getPassword } from './config.js'
 // Phase 3: Sync module public API
 export type { SyncResult, SyncOptions, FolderSyncResult } from './sync.js'
 export { syncAccount } from './sync.js'
+
+// Phase 4: Browse module public API
+export type { MessageSummary } from './browse.js'
+export {
+  resolveAccount,
+  getLog,
+  checkoutCommit,
+  listFolders,
+  listMessages,
+  viewMessage,
+} from './browse.js'
