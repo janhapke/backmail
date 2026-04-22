@@ -41,4 +41,76 @@ try {
 // Suppress unused variable warning — config is used by Phase 3+ subcommands
 void config
 
+// ── Phase 3: sync subcommand ─────────────────────────────────────────────────
+import { syncAccount } from '../core/index.js'
+
+function collectRepeatable(value: string, previous: string[]): string[] {
+  return [...previous, value]
+}
+
+program
+  .command('sync [account]')
+  .description('Sync IMAP mailbox(es) to git')
+  .option('--all', 'sync all configured accounts')
+  .option('--exclude-folder <name>', 'skip this folder (repeatable)', collectRepeatable, [])
+  .option('--only-folder <name>', 'restrict to this folder (repeatable)', collectRepeatable, [])
+  .option('--verbose', 'log one line per folder and per message')
+  .action(async (account: string | undefined, opts: { all?: boolean; excludeFolder: string[]; onlyFolder: string[]; verbose?: boolean }) => {
+    // D-02: --exclude-folder and --only-folder are mutually exclusive
+    if (opts.excludeFolder.length > 0 && opts.onlyFolder.length > 0) {
+      console.error('Error: --exclude-folder and --only-folder are mutually exclusive')
+      process.exit(1)
+    }
+
+    // SYNC-06: --all iterates every configured account
+    let accountNames: string[]
+    if (opts.all) {
+      accountNames = Object.keys(config.accounts)
+      if (accountNames.length === 0) {
+        console.error('No accounts configured')
+        process.exit(1)
+      }
+    } else if (account) {
+      if (!(account in config.accounts)) {
+        console.error(`Unknown account: ${account}`)
+        process.exit(1)
+      }
+      accountNames = [account]
+    } else {
+      console.error('Specify an account name or use --all')
+      process.exit(1)
+    }
+
+    let anyFailed = false
+    for (const name of accountNames) {
+      try {
+        const result = await syncAccount(name, config.accounts[name], {
+          excludeFolders: opts.excludeFolder,
+          onlyFolders: opts.onlyFolder,
+          verbose: opts.verbose ?? false,
+        })
+        if (result.repoInitialized) {
+          console.log(`Initialized git repo at ${config.accounts[name].repoPath}`)
+        }
+        // D-05 summary format; D-08 partial marker
+        const partialTag = result.partial ? ' [partial]' : ''
+        console.log(`${name}${partialTag}: +${result.added} added / -${result.removed} removed`)
+        // Per-folder error surfacing (verbose or error-only)
+        for (const fr of result.folderResults) {
+          if (fr.error) {
+            console.error(`${name}: folder ${fr.path} failed: ${fr.error.message}`)
+            anyFailed = true
+          } else if (opts.verbose) {
+            console.log(`${name}: ${fr.path}: +${fr.added} / -${fr.removed}`)
+          }
+        }
+      } catch (err) {
+        console.error(`${name}: ${(err as Error).message}`)
+        anyFailed = true
+      }
+    }
+
+    if (anyFailed) process.exit(1)
+  })
+
 program.parse(process.argv)
