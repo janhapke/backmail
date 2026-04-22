@@ -283,22 +283,10 @@ async function syncFolder(
 
     // Check for uidvalidity change (SYNC-05): triggers full re-sync
     if (storedState) {
-      let storedValidity: bigint | null = null
-      try {
-        storedValidity = BigInt(storedState.uidvalidity)
-      } catch {
-        // Corrupted state file — treat as uidvalidity change (full re-sync)
-        if (storedState.messages.length > 0) {
-          for (const msg of storedState.messages) {
-            const safeId = sanitizeMessageId(msg['message-id'])
-            const msgPath = path.join(repoPath, 'messages', `${safeId}.eml`)
-            await fs.unlink(msgPath).catch(() => {})
-          }
-          removed += storedState.messages.length
-        }
-        storedState = null
-      }
-      if (storedState && storedValidity !== null && storedValidity !== serverValidity) {
+      // uidvalidity is already stored as a string in JSON schema — compare as strings (T-4-01 CR-01 fix)
+      const storedValidityStr = storedState.uidvalidity
+      const serverValidityStr = serverValidity.toString()
+      if (storedValidityStr !== serverValidityStr) {
         // uidvalidity changed: invalidate all local state.
         // Delete all stored messages and treat as a fresh sync.
         if (storedState.messages.length > 0) {
