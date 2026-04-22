@@ -27,3 +27,7 @@ export async function ping(_config: AccountConfig): Promise<boolean> {
 // Phase 2: Config module public API
 export type { BackmailConfig } from './config.js'
 export { getConfigPath, loadConfig, getPassword } from './config.js'
+
+// Phase 3: Sync module public API
+export type { SyncResult, SyncOptions, FolderSyncResult } from './sync.js'
+export { syncAccount } from './sync.js'
