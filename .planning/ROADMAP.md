@@ -83,9 +83,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — Dependencies + CR-01 fix (npm install mailparser, fix BigInt in sync.ts, browse.ts skeleton + test stubs)
-- [ ] 04-02-PLAN.md — Core browse module (src/core/browse.ts: getLog, checkoutCommit, listFolders, listMessages, viewMessage; unit + integration tests)
-- [ ] 04-03-PLAN.md — CLI browse subcommands (src/cli/index.ts: accounts, log, checkout, ls, view; CLI integration tests)
+- [x] 04-01-PLAN.md — Dependencies + CR-01 fix (npm install mailparser, fix BigInt in sync.ts, browse.ts skeleton + test stubs)
+- [x] 04-02-PLAN.md — Core browse module (src/core/browse.ts: getLog, checkoutCommit, listFolders, listMessages, viewMessage; unit + integration tests)
+- [x] 04-03-PLAN.md — CLI browse subcommands (src/cli/index.ts: accounts, log, checkout, ls, view; CLI integration tests)
 
 ### Phase 5: Restore
 **Goal**: Users can re-upload messages from a backup checkout to any target IMAP server with duplicate-checking and dry-run support
