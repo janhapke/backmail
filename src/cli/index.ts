@@ -187,4 +187,26 @@ program
     }
   })
 
+// ── Phase 4: view subcommand ────────────────────────────────────────────────
+program
+  .command('view <message-id>')
+  .description('View an email message')
+  .option('--account <name>', 'account name (optional if single account configured)')
+  .option('--format <fmt>', 'output format: eml, plaintext, json', 'plaintext')
+  .action(async (messageId: string, opts: { account?: string; format: string }) => {
+    try {
+      const [, accountConfig] = resolveAccount(config, opts.account)
+      const format = opts.format as 'eml' | 'plaintext' | 'json'
+      const result = await viewMessage(accountConfig.repoPath, messageId, format)
+      if (format === 'json') {
+        console.log(JSON.stringify(result, null, 2))
+      } else {
+        console.log(result)
+      }
+    } catch (err) {
+      console.error((err as Error).message)
+      process.exit(1)
+    }
+  })
+
 program.parse(process.argv)
