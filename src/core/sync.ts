@@ -315,7 +315,9 @@ async function syncFolder(
     }
 
     // Calculate fetch range (SYNC-01): fetch only new messages
-    const lastUid = storedState && storedState.messages.length > 0 ? Math.max(...storedState.messages.map((m) => m.uid)) : 0
+    const lastUid = storedState && storedState.messages.length > 0
+      ? Math.max(...storedState.messages.map((m) => m.uid ?? 0))
+      : 0
     const range = lastUid === 0 ? '1:*' : `${lastUid + 1}:*`
 
     // Fetch new messages
