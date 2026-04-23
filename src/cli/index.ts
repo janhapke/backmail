@@ -15,31 +15,17 @@ program
   .description('Mirror IMAP mailboxes to git')
   .version('0.1.0')
 
-// Short-circuit for help/version flags — these must work without a config file
-const args = process.argv.slice(2)
-if (args.includes('--help') || args.includes('-h')) {
-  program.parse(process.argv)
-  process.exit(0)
+// Helper to load config with error handling
+function getConfig() {
+  try {
+    return loadConfig()
+  } catch (err) {
+    // Core threw — print to stderr and exit 1 (D-08)
+    // Do NOT log the full stack trace — only the error message
+    console.error((err as Error).message)
+    process.exit(1)
+  }
 }
-
-// Phase 2: Load and validate config before any command dispatch.
-// loadConfig() throws with the D-08 message when the file is missing.
-// getPassword() is NOT called here — credentials are lazy (D-09).
-let config
-try {
-  config = loadConfig()
-} catch (err) {
-  // Core threw — print to stderr and exit 1 (D-08)
-  // Do NOT log the full stack trace — only the error message
-  console.error((err as Error).message)
-  process.exit(1)
-}
-
-// Phase 2+ will add: sync, log, checkout, ls, view, restore subcommands.
-// Each subcommand receives `config` and calls getPassword(accountName) lazily when needed.
-
-// Suppress unused variable warning — config is used by Phase 3+ subcommands
-void config
 
 // ── Phase 3+ imports ────────────────────────────────────────────────────────
 import { syncAccount, getLog, checkoutCommit, listFolders, listMessages, viewMessage, resolveAccount, restoreAccount } from '../core/index.js'
@@ -56,6 +42,8 @@ program
   .option('--only-folder <name>', 'restrict to this folder (repeatable)', collectRepeatable, [])
   .option('--verbose', 'log one line per folder and per message')
   .action(async (account: string | undefined, opts: { all?: boolean; excludeFolder: string[]; onlyFolder: string[]; verbose?: boolean }) => {
+    const config = getConfig()
+
     // D-02: --exclude-folder and --only-folder are mutually exclusive
     if (opts.excludeFolder.length > 0 && opts.onlyFolder.length > 0) {
       console.error('Error: --exclude-folder and --only-folder are mutually exclusive')
@@ -118,6 +106,7 @@ program
   .command('accounts')
   .description('List all configured IMAP accounts')
   .action(() => {
+    const config = getConfig()
     const names = Object.keys(config.accounts)
     for (const name of names) {
       console.log(name)
@@ -132,6 +121,7 @@ program
   .option('--limit <n>', 'number of commits to show (or "unlimited")', '20')
   .action(async (opts: { account?: string; limit: string }) => {
     try {
+      const config = getConfig()
       const [, accountConfig] = resolveAccount(config, opts.account)
       const limitValue = opts.limit === 'unlimited' ? 'unlimited' : parseInt(opts.limit, 10)
       const commits = await getLog(accountConfig.repoPath, limitValue)
@@ -151,6 +141,7 @@ program
   .option('--account <name>', 'account name (optional if single account configured)')
   .action(async (dateOrHash: string, opts: { account?: string }) => {
     try {
+      const config = getConfig()
       const [, accountConfig] = resolveAccount(config, opts.account)
       const result = await checkoutCommit(accountConfig.repoPath, dateOrHash)
       console.log(`Checked out ${dateOrHash} (${result.sha}) → ${result.path}`)
@@ -167,6 +158,7 @@ program
   .option('--account <name>', 'account name (optional if single account configured)')
   .action(async (folder: string | undefined, opts: { account?: string }) => {
     try {
+      const config = getConfig()
       const [, accountConfig] = resolveAccount(config, opts.account)
       if (!folder) {
         // List folders
@@ -195,6 +187,7 @@ program
   .option('--format <fmt>', 'output format: eml, plaintext, json', 'plaintext')
   .action(async (messageId: string, opts: { account?: string; format: string }) => {
     try {
+      const config = getConfig()
       const [, accountConfig] = resolveAccount(config, opts.account)
       const format = opts.format as 'eml' | 'plaintext' | 'json'
       const result = await viewMessage(accountConfig.repoPath, messageId, format)
@@ -226,6 +219,7 @@ program
     verbose?: boolean
   }) => {
     try {
+      const config = getConfig()
       const [, accountConfig] = resolveAccount(config, opts.account)
 
       // Convert --skip-duplicates string to boolean (D-11)
