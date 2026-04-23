@@ -11,10 +11,10 @@ files_reviewed_list:
   - src/core/index.ts
   - src/cli/index.ts
 findings:
-  critical: 3
+  critical: 5
   warning: 4
-  info: 5
-  total: 12
+  info: 6
+  total: 15
 status: issues_found
 ---
 
@@ -29,19 +29,63 @@ status: issues_found
 
 The Phase 5 restore implementation provides a functional API for restoring messages from a local git backup to a target IMAP server. The code architecture correctly separates concerns (core restore logic vs CLI layer) and implements most of the design decisions from 05-CONTEXT.md.
 
-However, there are **3 critical issues** that must be fixed before production use:
+However, there are **5 critical issues** that must be fixed before the feature is usable:
 
-1. **Path reconstruction logic is broken** — Folder paths with special characters won't restore correctly
-2. **Potential password leak in error messages** — URL credentials could be exposed in error output
-3. **Mailbox lock handling has subtle race conditions** — Could cause resource leaks
+1. **Missing `await` on async operations in integration tests** — Test race conditions will cause unpredictable failures
+2. **Path reconstruction logic is broken** — Folder paths with special characters won't restore correctly
+3. **Potential password leak in error messages** — URL credentials could be exposed in error output
+4. **Mailbox lock handling has subtle race conditions** — Could cause resource leaks
+5. **Unsafe type assertion on caught errors** — Non-Error objects will crash the CLI
 
-Additionally, **4 warnings** identify logic gaps in error handling and edge case coverage, and **5 info items** flag test gaps and code quality improvements.
+Additionally, **4 warnings** identify logic gaps in error handling and edge case coverage, and **6 info items** flag test gaps and code quality improvements.
 
 ## Critical Issues
 
-### CR-01: Folder Path Reconstruction is Broken
+### CR-01: Missing `await` on ImapFlow.connect() in Integration Tests
 
-**File:** `src/core/restore.ts:186-191`
+**Files:** 
+- `tests/integration/restore-sync.test.ts:133, 231, 256`
+- `tests/integration/cli-restore.test.ts:133`
+
+**Issue:** Lines 133, 231, and 256 call `targetClient.connect()`, `beforeClient.connect()`, and `afterClient.connect()` without `await`. ImapFlow.connect() is an async operation that returns a Promise. Without awaiting, the next line executes immediately before the connection is established, causing race conditions that will cause tests to hang or fail unpredictably.
+
+Example at line 133 in restore-sync.test.ts:
+```typescript
+targetClient.connect()  // ❌ WRONG - returns Promise immediately
+const lock = await targetClient.getMailboxLock('INBOX')  // ⚠️ Runs before connect completes
+```
+
+This is a critical testing bug that makes the integration tests unreliable.
+
+**Fix:** Add `await` to all connect() calls:
+
+```typescript
+// restore-sync.test.ts line 133 - change from:
+targetClient.connect()
+// to:
+await targetClient.connect()
+
+// cli-restore.test.ts line 133 - change from:
+targetClient.connect()
+// to:
+await targetClient.connect()
+
+// restore-sync.test.ts line 231 - change from:
+beforeClient.connect()
+// to:
+await beforeClient.connect()
+
+// restore-sync.test.ts line 256 - change from:
+afterClient.connect()
+// to:
+await afterClient.connect()
+```
+
+---
+
+### CR-02: Folder Path Reconstruction is Broken
+
+**File:** `src/core/restore.ts:182-191`
 
 **Issue:** The code attempts to reverse the `folderPathToFilename()` sanitization by replacing underscores with slashes:
 
@@ -73,9 +117,9 @@ const folderPath = folderState.folderPath
 
 ---
 
-### CR-02: Password Exposure in Error Messages
+### CR-03: Password Exposure in Error Messages
 
-**File:** `src/cli/index.ts:263-267`
+**File:** `src/cli/index.ts:259-262`
 
 **Issue:** The restore command catches errors and prints them to stderr:
 
@@ -92,6 +136,8 @@ If `parseImapUrl()` or any downstream function includes the original URL in its 
 ```
 Invalid URL: imap://user:secretpass@host — contains invalid characters
 ```
+
+This is a security vulnerability.
 
 **Fix:** Sanitize error messages to remove credentials before logging:
 
@@ -116,7 +162,7 @@ throw new Error(`Invalid URL: ${urlStr}`)
 
 ---
 
-### CR-03: Mailbox Lock May Not Be Released on APPEND Error
+### CR-04: Mailbox Lock May Not Be Released on APPEND Error
 
 **File:** `src/core/restore.ts:243-261`
 
@@ -125,7 +171,7 @@ throw new Error(`Invalid URL: ${urlStr}`)
 ```typescript
 const lock = await targetClient.getMailboxLock(folderPath)
 try {
-  await targetClient.append(folderPath, content, { flags: [] })
+  await targetClient.append(folderPath, content, [])
   folderUploaded++
   result.uploaded++
 } finally {
@@ -133,7 +179,7 @@ try {
 }
 ```
 
-**The problem:** If `targetClient.append()` throws, the lock is released in the finally block (correct). However, this entire block is wrapped in an outer try-catch at line 226:
+This entire block is wrapped in an outer try-catch at line 226:
 
 ```typescript
 try {
@@ -145,28 +191,65 @@ try {
 
 If `lock.release()` itself throws (e.g., connection died), the error bubbles up and is caught by the outer try-catch. But the lock state is inconsistent — the lock object still exists but may not be truly released by the server. This can cause subsequent operations to fail or hang.
 
-**Fix:** Ensure the finally block doesn't throw, and handle lock release errors gracefully:
+**Fix:** Ensure the finally block doesn't propagate errors by catching them internally:
 
 ```typescript
 const lock = await targetClient.getMailboxLock(folderPath)
 try {
-  await targetClient.append(folderPath, content, { flags: [] })
+  await targetClient.append(folderPath, content, [])
   folderUploaded++
   result.uploaded++
-} catch (err) {
-  // Re-throw to be caught by outer handler, but ensure lock is cleaned up
-  throw err
 } finally {
   try {
     await lock.release()
-  } catch (releaseErr) {
-    // Log but don't re-throw (this is a cleanup error)
-    console.warn('Failed to release mailbox lock (may affect future operations)')
+  } catch (_releaseErr) {
+    // Swallow cleanup errors to prevent masking append errors
+    // Lock will eventually timeout on server
   }
 }
 ```
 
-But since the core layer should not use console, this should be handled differently — perhaps by returning a warning in the result or letting the outer catch handle it.
+---
+
+### CR-05: Unsafe Type Assertion on Caught Errors
+
+**File:** `src/cli/index.ts:25, 96, 132, 149, 177, 200, 259`
+
+**Issue:** Multiple lines cast caught errors to `Error` type without runtime validation:
+
+```typescript
+catch (err) {
+  console.error((err as Error).message)
+  process.exit(1)
+}
+```
+
+While Node.js typically throws Error objects, it's possible for `throw` statements to throw primitives (strings, numbers, null, etc.). The pattern `(err as Error).message` will crash with "Cannot read property 'message' of null" if a non-Error is thrown.
+
+Example crash:
+```typescript
+throw "Something bad happened"  // Invalid but possible
+// Later...
+catch (err) {
+  console.error((err as Error).message)  // ❌ CRASH: Cannot read property 'message' of string
+}
+```
+
+**Fix:** Add proper type guards or a helper function:
+
+```typescript
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message
+  if (typeof err === 'string') return err
+  return String(err)
+}
+
+// Then use:
+catch (err) {
+  console.error(getErrorMessage(err))
+  process.exit(1)
+}
+```
 
 ---
 
@@ -174,7 +257,7 @@ But since the core layer should not use console, this should be handled differen
 
 ### WR-01: Loose Type for Folder State JSON
 
-**File:** `src/core/restore.ts:210-212`
+**File:** `src/core/restore.ts:210-216`
 
 **Issue:** The folder state is typed as `{ messages: Array<{ 'message-id': string }> }`, but doesn't validate the structure before accessing:
 
@@ -231,12 +314,11 @@ This is technically correct (no connection to target in dry-run mode), but the b
 - **Option B:** Connect to target *only* for duplicate detection, even in dry-run mode, then report what *would* be skipped
 - **Option C:** Clearly document this limitation in the CLI help text
 
-**Fix:** Add a comment explaining the behavior, or change the design to connect for detection only:
+**Fix:** Add a comment explaining the behavior:
 
 ```typescript
-// Comment for clarity:
-// In dry-run mode, skipDuplicates is ignored because we don't connect to target.
-// If duplicate detection is needed in dry-run, the user must remove --dry-run.
+// In dry-run mode, skipDuplicates check is skipped because targetClient is null.
+// Duplicate detection requires connecting to the target server.
 if (options.skipDuplicates && targetClient) {
 ```
 
@@ -321,11 +403,15 @@ Then the CLI layer can format and display these details.
 - `tests/integration/restore-sync.test.ts:112-251`
 - `tests/integration/cli-restore.test.ts:112-288`
 
-**Issue:** All test cases contain only `expect(true).toBe(true)` placeholders. While this is intentional per the test comments, it means the restore feature has zero test coverage currently.
+**Issue:** All test cases contain only placeholder assertions. While the test structure is clear, the restore feature currently has zero functional test coverage.
 
-Each test file lists the expected test cases clearly, so implementation is straightforward. The tests should be filled in before the feature is merged.
+The test files list expected test cases clearly, so implementation is straightforward. However, the missing `await` keywords (CR-01) must be fixed first, or the tests will hang/fail.
 
-**Fix:** Implement the test cases once the core functionality is ready. Current structure is good; just needs assertions filled in.
+**Fix:** 
+1. First, fix CR-01 (add `await` to connect() calls)
+2. Then implement the test case assertions
+
+Current test structure is good; just needs assertions filled in.
 
 ---
 
@@ -390,7 +476,7 @@ Or collect details in `errorDetails` (as suggested in WR-04).
 
 ### IN-04: Unused Comment in Folder Path Code
 
-**File:** `src/core/restore.ts:187-191`
+**File:** `src/core/restore.ts:188-190`
 
 **Issue:** The comment acknowledges this is a limitation but leaves it unresolved:
 
@@ -399,15 +485,15 @@ Or collect details in `errorDetails` (as suggested in WR-04).
 return f.replace(/_/g, '/')
 ```
 
-This should either be fixed (CR-01 above) or documented as a known issue. As-is, it's a time bomb.
+This should either be fixed (CR-02 above) or documented as a known issue. As-is, it's a time bomb.
 
-**Fix:** See CR-01. Store the original folder path in the JSON metadata.
+**Fix:** See CR-02. Store the original folder path in the JSON metadata.
 
 ---
 
 ### IN-05: Verbose Flag is Accepted but Not Used in Core
 
-**File:** `src/core/restore.ts:152` and CLI usage at `src/cli/index.ts:244`
+**File:** `src/core/restore.ts:17` and CLI usage at `src/cli/index.ts:213`
 
 **Issue:** The `RestoreOptions` includes `verbose: boolean`, but the core `restoreAccount()` function doesn't use it:
 
@@ -431,21 +517,47 @@ Current design (leaving verbose to CLI) is good, but the implementation is incom
 
 ---
 
+### IN-06: Missing Validation for Message-ID Format
+
+**File:** `src/core/restore.ts:224`
+
+**Issue:** The code extracts `messageId` from folder state without validating it:
+
+```typescript
+const messageId = msg['message-id']
+```
+
+If a message object lacks the `message-id` field, `messageId` will be `undefined`. Calling `sanitizeMessageId(undefined)` on line 237 may produce unexpected results.
+
+**Fix:** Validate before using:
+
+```typescript
+const messageId = msg['message-id']
+if (!messageId || typeof messageId !== 'string') {
+  result.errors++
+  continue
+}
+```
+
+---
+
 ## Summary of Recommended Actions
 
-**Before merging:**
-1. Fix CR-01 (folder path reconstruction) by storing original paths in metadata
-2. Fix CR-02 (password leak) by sanitizing error messages in CLI
-3. Fix CR-03 (lock handling) by ensuring errors in lock cleanup are handled gracefully
+**Before feature is usable (Critical):**
+1. **CR-01:** Fix missing `await` on connect() calls in tests (blocks testing)
+2. **CR-02:** Fix folder path reconstruction by storing original paths in metadata
+3. **CR-03:** Sanitize error messages to prevent password leaks
+4. **CR-04:** Handle lock.release() errors gracefully
+5. **CR-05:** Add proper error type guards in CLI layer
 
-**Before release:**
-1. Implement all test cases (currently placeholders)
+**Before release (High Priority):**
+1. Implement all test case assertions (currently placeholders)
 2. Add error detail collection (WR-04) to make debugging possible
-3. Validate port numbers (IN-02) to prevent silent failures
+3. Validate port numbers (IN-02) and message-ID formats (IN-06) to prevent silent failures
 
-**Nice to have:**
+**Nice to have (Low Priority):**
 1. Separate folder errors from message errors (IN-03)
-2. Add comments explaining the dry-run + skip-duplicates behavior (WR-02)
+2. Add comments explaining dry-run + skip-duplicates behavior (WR-02)
 
 ---
 
