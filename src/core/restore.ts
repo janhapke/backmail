@@ -35,7 +35,7 @@ export interface RestoreResult {
  * - T-5-01: Safe URL parsing using Node.js URL constructor
  * - Pitfall 1: Default port selection (143 for imap://, 993 for imaps://)
  */
-function parseImapUrl(urlStr: string): {
+export function parseImapUrl(urlStr: string): {
   host: string
   port: number
   username: string
@@ -84,7 +84,7 @@ function parseImapUrl(urlStr: string): {
  * - REST-02: Skip messages with duplicate Message-ID
  * - Pitfall 2: Always release mailbox lock in finally block
  */
-async function isDuplicate(
+export async function isDuplicate(
   client: ImapFlow,
   folderPath: string,
   messageId: string
@@ -109,7 +109,7 @@ async function isDuplicate(
  * - REST-04, D-09: Create missing folders before message upload
  * - Pitfall 5: Handle "already exists" errors gracefully
  */
-async function createFolderIfNeeded(
+export async function createFolderIfNeeded(
   client: ImapFlow,
   folderPath: string
 ): Promise<void> {
