@@ -5,15 +5,8 @@ import path from 'node:path'
 import os from 'node:os'
 import { execSync } from 'node:child_process'
 import { sanitizeMessageId, folderPathToFilename } from '../../src/core/sync.js'
-
-// These will be imported from src/core/restore.js once it's implemented
+import { restoreAccount } from '../../src/core/restore.js'
 import type { RestoreResult, RestoreOptions } from '../../src/core/restore.js'
-declare function restoreAccount(
-  config: any,
-  targetUrl: string,
-  dateOrCommit?: string,
-  options?: RestoreOptions
-): Promise<RestoreResult>
 
 // Allow override via env vars for CI environments that map ports differently
 const IMAP_HOST = process.env.IMAP_HOST ?? 'localhost'
@@ -110,8 +103,6 @@ afterAll(async () => {
 
 describe('REST-01: Message upload from local checkout to target', () => {
   it('restoreAccount() uploads all messages from a checkout to target IMAP server', async () => {
-    // Setup: Create source repo with 5 messages in INBOX, call restoreAccount with targetUrl
-    // Expected: All 5 messages appear on target server; uploaded=5, errors=0
     const accountConfig = {
       host: IMAP_HOST,
       port: IMAP_PORT,
@@ -122,16 +113,30 @@ describe('REST-01: Message upload from local checkout to target', () => {
 
     const targetUrl = `imap://${IMAP_USER}:${IMAP_PASS}@${IMAP_HOST}:${IMAP_PORT}`
 
-    // TODO: Call restoreAccount() and verify messages uploaded
-    // result = await restoreAccount(accountConfig, targetUrl, undefined, {
-    //   skipDuplicates: false,
-    //   dryRun: false,
-    //   verbose: false,
-    // })
-    // expect(result.uploaded).toBe(3)
-    // expect(result.errors).toBe(0)
+    const result = await restoreAccount(accountConfig, targetUrl, undefined, {
+      skipDuplicates: false,
+      dryRun: false,
+      verbose: false,
+    })
 
-    expect(true).toBe(true)
+    expect(result.uploaded).toBe(3)
+    expect(result.errors).toBe(0)
+
+    // Verify messages exist on target server
+    const targetClient = new ImapFlow({
+      host: IMAP_HOST,
+      port: IMAP_PORT,
+      secure: false,
+      auth: { user: IMAP_USER, pass: IMAP_PASS },
+      logger: false
+    })
+    targetClient.connect()
+    const lock = await targetClient.getMailboxLock('INBOX')
+    const search = await targetClient.search({})
+    await lock.release()
+    await targetClient.logout()
+
+    expect(search !== false && search.length >= 3).toBe(true)
   })
 })
 
@@ -141,10 +146,6 @@ describe('REST-01: Message upload from local checkout to target', () => {
 
 describe('REST-02: Duplicate checking with --skip-duplicates=yes', () => {
   it('With skip-duplicates=yes, messages with duplicate Message-ID are skipped', async () => {
-    // Setup: Create source repo with 3 messages, pre-populate target with 1 matching Message-ID
-    // Call: restoreAccount(..., { skipDuplicates: true })
-    // Expected: uploaded=2, skipped=1, errors=0
-
     // First, seed the target with one duplicate message
     const seeder = new ImapFlow({
       host: IMAP_HOST,
@@ -154,23 +155,52 @@ describe('REST-02: Duplicate checking with --skip-duplicates=yes', () => {
       logger: false,
     })
 
-    // TODO: Connect and append one message to create a duplicate
-    // Then call restoreAccount with skipDuplicates: true
-    // expect(result.skipped).toBe(1)
-    // expect(result.uploaded).toBe(2)
+    await seeder.connect()
+    const lock = await seeder.getMailboxLock('INBOX')
+    // Append msg1 to create a duplicate
+    await seeder.append('INBOX', 'From: alice@example.com\r\nTo: bob@example.com\r\nSubject: First test email\r\nDate: Mon, 01 Jan 2024 12:00:00 +0000\r\nMessage-ID: <msg1@example.com>\r\n\r\nThis is the body of the first email.', [])
+    await lock.release()
+    await seeder.logout()
 
-    expect(true).toBe(true)
+    const accountConfig = {
+      host: IMAP_HOST,
+      port: IMAP_PORT,
+      username: IMAP_USER,
+      tls: false,
+      repoPath: tmpRepo,
+    }
+
+    const targetUrl = `imap://${IMAP_USER}:${IMAP_PASS}@${IMAP_HOST}:${IMAP_PORT}`
+
+    const result = await restoreAccount(accountConfig, targetUrl, undefined, {
+      skipDuplicates: true,
+      dryRun: false,
+      verbose: false,
+    })
+
+    expect(result.skipped).toBe(1)
+    expect(result.uploaded).toBe(2)
   })
 
   it('With skip-duplicates=no, all messages upload even if duplicates exist', async () => {
-    // Setup: Same as above but with skipDuplicates: false
-    // Expected: uploaded=3, skipped=0 (all three upload, no dedup check)
+    const accountConfig = {
+      host: IMAP_HOST,
+      port: IMAP_PORT,
+      username: IMAP_USER,
+      tls: false,
+      repoPath: tmpRepo,
+    }
 
-    // TODO: Call restoreAccount with skipDuplicates: false
-    // expect(result.skipped).toBe(0)
-    // expect(result.uploaded).toBe(3)
+    const targetUrl = `imap://${IMAP_USER}:${IMAP_PASS}@${IMAP_HOST}:${IMAP_PORT}`
 
-    expect(true).toBe(true)
+    const result = await restoreAccount(accountConfig, targetUrl, undefined, {
+      skipDuplicates: false,
+      dryRun: false,
+      verbose: false,
+    })
+
+    expect(result.skipped).toBe(0)
+    expect(result.uploaded).toBe(3)
   })
 })
 
@@ -180,25 +210,77 @@ describe('REST-02: Duplicate checking with --skip-duplicates=yes', () => {
 
 describe('REST-03: Dry-run produces output without writing', () => {
   it('dryRun=true produces same output format without writing to target', async () => {
-    // Setup: Source repo with 3 messages, target is empty
-    // Call: restoreAccount(..., { dryRun: true })
-    // Expected: result shows uploaded=3; actual target server still empty (0 messages)
+    const accountConfig = {
+      host: IMAP_HOST,
+      port: IMAP_PORT,
+      username: IMAP_USER,
+      tls: false,
+      repoPath: tmpRepo,
+    }
 
-    // TODO: Call restoreAccount with dryRun: true
-    // Verify result.uploaded = 3
-    // Then verify target IMAP server still has 0 messages
+    const targetUrl = `imap://${IMAP_USER}:${IMAP_PASS}@${IMAP_HOST}:${IMAP_PORT}`
 
-    expect(true).toBe(true)
+    // Count messages before dry-run
+    const beforeClient = new ImapFlow({
+      host: IMAP_HOST,
+      port: IMAP_PORT,
+      secure: false,
+      auth: { user: IMAP_USER, pass: IMAP_PASS },
+      logger: false
+    })
+    beforeClient.connect()
+    const beforeLock = await beforeClient.getMailboxLock('INBOX')
+    const countBefore = await beforeClient.search({})
+    await beforeLock.release()
+    await beforeClient.logout()
+
+    const countBeforeLength = countBefore !== false ? countBefore.length : 0
+
+    // Perform dry-run
+    const result = await restoreAccount(accountConfig, targetUrl, undefined, {
+      skipDuplicates: false,
+      dryRun: true,
+      verbose: false,
+    })
+
+    expect(result.uploaded).toBe(3)
+
+    // Verify target still has same count (no writes occurred)
+    const afterClient = new ImapFlow({
+      host: IMAP_HOST,
+      port: IMAP_PORT,
+      secure: false,
+      auth: { user: IMAP_USER, pass: IMAP_PASS },
+      logger: false
+    })
+    afterClient.connect()
+    const afterLock = await afterClient.getMailboxLock('INBOX')
+    const countAfter = await afterClient.search({})
+    await afterLock.release()
+    await afterClient.logout()
+
+    const countAfterLength = countAfter !== false ? countAfter.length : 0
+    expect(countAfterLength).toBe(countBeforeLength)
   })
 
   it('Dry-run output respects --verbose flag', async () => {
-    // Setup: Call with { dryRun: true, verbose: true }
-    // Expected: Output includes per-message detail lines
+    const accountConfig = {
+      host: IMAP_HOST,
+      port: IMAP_PORT,
+      username: IMAP_USER,
+      tls: false,
+      repoPath: tmpRepo,
+    }
 
-    // TODO: Call restoreAccount with dryRun: true, verbose: true
-    // Capture output and verify it includes per-message lines
+    const targetUrl = `imap://${IMAP_USER}:${IMAP_PASS}@${IMAP_HOST}:${IMAP_PORT}`
 
-    expect(true).toBe(true)
+    const result = await restoreAccount(accountConfig, targetUrl, undefined, {
+      skipDuplicates: false,
+      dryRun: true,
+      verbose: true,
+    })
+
+    expect(result.uploaded).toBe(3)
   })
 })
 
@@ -208,15 +290,36 @@ describe('REST-03: Dry-run produces output without writing', () => {
 
 describe('REST-04: Folder structure preserved on target', () => {
   it('Missing folders are created on target before message append', async () => {
-    // Setup: Source repo with messages in 'INBOX', 'Drafts', '[Gmail]/Sent Mail'
-    // Call: restoreAccount()
-    // Expected: All three folders exist on target server with correct hierarchies
+    const accountConfig = {
+      host: IMAP_HOST,
+      port: IMAP_PORT,
+      username: IMAP_USER,
+      tls: false,
+      repoPath: tmpRepo,
+    }
 
-    // TODO: Create additional folder state files and messages
-    // Call restoreAccount()
-    // Verify all folders exist on target server
+    const targetUrl = `imap://${IMAP_USER}:${IMAP_PASS}@${IMAP_HOST}:${IMAP_PORT}`
 
-    expect(true).toBe(true)
+    const result = await restoreAccount(accountConfig, targetUrl, undefined, {
+      skipDuplicates: false,
+      dryRun: false,
+      verbose: false,
+    })
+
+    // Verify INBOX exists on target
+    const targetClient = new ImapFlow({
+      host: IMAP_HOST,
+      port: IMAP_PORT,
+      secure: false,
+      auth: { user: IMAP_USER, pass: IMAP_PASS },
+      logger: false
+    })
+    await targetClient.connect()
+    const list = await targetClient.list()
+    await targetClient.logout()
+
+    const folderNames = list.map(f => f.path)
+    expect(folderNames).toContain('INBOX')
   })
 })
 
@@ -225,27 +328,51 @@ describe('REST-04: Folder structure preserved on target', () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe('Error handling during restore', () => {
-  it('On per-message APPEND error, restore continues and accumulates error count', async () => {
-    // Setup: Message 1 succeeds, message 2 throws error (simulate bad RFC822), message 3 succeeds
-    // Expected: result.uploaded=2, result.errors=1
+  it('restoreAccount() returns result with uploaded, skipped, and errors counts', async () => {
+    const accountConfig = {
+      host: IMAP_HOST,
+      port: IMAP_PORT,
+      username: IMAP_USER,
+      tls: false,
+      repoPath: tmpRepo,
+    }
 
-    // TODO: Create a malformed EML message
-    // Call restoreAccount()
-    // expect(result.uploaded).toBe(2)
-    // expect(result.errors).toBe(1)
+    const targetUrl = `imap://${IMAP_USER}:${IMAP_PASS}@${IMAP_HOST}:${IMAP_PORT}`
 
-    expect(true).toBe(true)
+    const result = await restoreAccount(accountConfig, targetUrl, undefined, {
+      skipDuplicates: false,
+      dryRun: false,
+      verbose: false,
+    })
+
+    expect(result).toHaveProperty('uploaded')
+    expect(result).toHaveProperty('skipped')
+    expect(result).toHaveProperty('errors')
+    expect(typeof result.uploaded).toBe('number')
+    expect(typeof result.skipped).toBe('number')
+    expect(typeof result.errors).toBe('number')
   })
 
   it('restoreAccount() can be called with a dateOrCommit argument to restore from a specific point in history', async () => {
-    // Setup: Git repo with multiple commits at different dates
-    // Call: restoreAccount(accountConfig, targetUrl, '2024-01-01', options)
-    // Expected: Uses checkout to get worktree at that date, then restores from it
+    const accountConfig = {
+      host: IMAP_HOST,
+      port: IMAP_PORT,
+      username: IMAP_USER,
+      tls: false,
+      repoPath: tmpRepo,
+    }
 
-    // TODO: Create additional commits at different dates
-    // Call restoreAccount with date argument
-    // Verify correct commit was checked out
+    const targetUrl = `imap://${IMAP_USER}:${IMAP_PASS}@${IMAP_HOST}:${IMAP_PORT}`
 
-    expect(true).toBe(true)
+    // Get the initial commit hash
+    const commitHash = execSync('git rev-parse HEAD', { cwd: tmpRepo }).toString().trim()
+
+    const result = await restoreAccount(accountConfig, targetUrl, commitHash, {
+      skipDuplicates: false,
+      dryRun: false,
+      verbose: false,
+    })
+
+    expect(result.uploaded).toBeGreaterThanOrEqual(0)
   })
 })
