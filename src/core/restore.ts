@@ -95,7 +95,7 @@ async function isDuplicate(
     const results = await client.search({
       header: { 'message-id': messageId }
     })
-    return results.length > 0
+    return results !== false && results.length > 0
   } finally {
     // ALWAYS release lock (Pitfall 2)
     await lock.release()
@@ -242,7 +242,7 @@ export async function restoreAccount(
           if (targetClient) {
             const lock = await targetClient.getMailboxLock(folderPath)
             try {
-              await targetClient.append(folderPath, content, { flags: [] })
+              await targetClient.append(folderPath, content, [])
               folderUploaded++
               result.uploaded++
             } finally {
