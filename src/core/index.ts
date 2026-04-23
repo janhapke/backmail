@@ -42,3 +42,7 @@ export {
   listMessages,
   viewMessage,
 } from './browse.js'
+
+// Phase 5: Restore module public API
+export type { RestoreResult, RestoreOptions } from './restore.js'
+export { restoreAccount } from './restore.js'
