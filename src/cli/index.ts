@@ -41,8 +41,8 @@ try {
 // Suppress unused variable warning — config is used by Phase 3+ subcommands
 void config
 
-// ── Phase 3: sync subcommand ─────────────────────────────────────────────────
-import { syncAccount, getLog, checkoutCommit, listFolders, listMessages, viewMessage, resolveAccount } from '../core/index.js'
+// ── Phase 3+ imports ────────────────────────────────────────────────────────
+import { syncAccount, getLog, checkoutCommit, listFolders, listMessages, viewMessage, resolveAccount, restoreAccount } from '../core/index.js'
 
 function collectRepeatable(value: string, previous: string[]): string[] {
   return [...previous, value]
@@ -205,6 +205,65 @@ program
       }
     } catch (err) {
       console.error((err as Error).message)
+      process.exit(1)
+    }
+  })
+
+// ── Phase 5: restore subcommand ─────────────────────────────────────────────
+program
+  .command('restore [date|commit]')
+  .description('Restore messages from backup to target IMAP server')
+  .requiredOption('--to <imap-url>', 'target IMAP URL (imap:// or imaps://)')
+  .option('--account <name>', 'account name (optional if single account configured)')
+  .option('--skip-duplicates <yes|no>', 'check for duplicates (default: yes)', 'yes')
+  .option('--dry-run', 'output without writing to target server', false)
+  .option('--verbose', 'log one line per message', false)
+  .action(async (dateOrCommit: string | undefined, opts: {
+    to: string
+    account?: string
+    skipDuplicates: string
+    dryRun?: boolean
+    verbose?: boolean
+  }) => {
+    try {
+      const [, accountConfig] = resolveAccount(config, opts.account)
+
+      // Convert --skip-duplicates string to boolean (D-11)
+      const skipDuplicates = opts.skipDuplicates === 'yes'
+      const dryRun = opts.dryRun ?? false
+      const verbose = opts.verbose ?? false
+
+      // Call core restoreAccount function
+      const result = await restoreAccount(
+        accountConfig,
+        opts.to,
+        dateOrCommit,
+        {
+          skipDuplicates,
+          dryRun,
+          verbose,
+        }
+      )
+
+      // Format and print output (D-14, D-15, D-16)
+      const prefix = dryRun ? '[dry-run] ' : ''
+      if (result.errors === 0) {
+        console.log(
+          `${prefix}Total: ${result.uploaded} uploaded, ${result.skipped} skipped`
+        )
+      } else {
+        // D-18: Include error count in summary
+        console.log(
+          `${prefix}Total: ${result.uploaded} uploaded, ${result.skipped} skipped, ${result.errors} errors`
+        )
+        // D-19: Include retry hint
+        console.error('Re-run with --skip-duplicates=yes to safely retry (already-uploaded messages will be skipped)')
+        process.exit(1)
+      }
+    } catch (err) {
+      // D-19: Print error but never the URL with password (Pitfall 4, T-5-02)
+      const msg = (err as Error).message
+      console.error(`Restore failed: ${msg}`)
       process.exit(1)
     }
   })
