@@ -256,7 +256,12 @@ export async function restoreAccount(
               folderUploaded++
               result.uploaded++
             } finally {
-              await lock.release()  // Pitfall 2: always release
+              try {
+                await lock.release()  // Pitfall 2: always release
+              } catch (_releaseErr) {
+                // Swallow cleanup errors to prevent masking append errors
+                // Lock will eventually timeout on server
+              }
             }
           } else {
             // Dry-run: count as uploaded without actually appending (D-12)
