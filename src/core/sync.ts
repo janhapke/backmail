@@ -42,6 +42,7 @@ interface FolderMessage {
 }
 
 interface FolderState {
+  folderPath: string
   uidvalidity: string
   uidnext: number
   messages: FolderMessage[]
@@ -346,6 +347,7 @@ async function syncFolder(
 
     // Write updated folder state
     const updatedState: FolderState = {
+      folderPath: folder.path,
       uidvalidity: serverValidity.toString(),
       uidnext: serverUidNext,
       messages: [...keptMessages, ...newMessages],

@@ -180,15 +180,25 @@ export async function restoreAccount(
 
     // REST-04, D-09: List all folders from folders/*.json and create them on target
     const folderFiles = await fs.readdir(path.join(sourcePath, 'folders'))
-    const folderPaths = folderFiles
-      .filter(f => f.endsWith('.json'))
-      .map(f => f.replace(/\.json$/, ''))
-      .map(f => {
-        // Reverse of folderPathToFilename() — restore original folder path from sanitized filename
-        // For now, assume 1:1 mapping (sanitized path == original folder path for typical cases)
-        // This is a limitation that could be improved by storing original path in folders/*.json metadata
-        return f.replace(/_/g, '/') // Simple reversal; may need refinement based on sync.ts logic
-      })
+
+    // Read folderPath from each JSON file; fall back to filename reversal for legacy state files
+    const folderPaths: string[] = []
+    for (const folderFilename of folderFiles.filter(f => f.endsWith('.json'))) {
+      try {
+        const folderJsonPath = path.join(sourcePath, 'folders', folderFilename)
+        const folderStateData: { folderPath?: string } = JSON.parse(await fs.readFile(folderJsonPath, 'utf-8'))
+        if (folderStateData.folderPath && typeof folderStateData.folderPath === 'string') {
+          folderPaths.push(folderStateData.folderPath)
+        } else {
+          // Legacy fallback: reconstruct from filename (less reliable, no folderPath stored)
+          const sanitizedName = folderFilename.replace(/\.json$/, '')
+          folderPaths.push(sanitizedName.replace(/_/g, '/'))
+        }
+      } catch {
+        // Skip malformed JSON; caught again during message restoration
+        continue
+      }
+    }
 
     // Create all folders on target first (D-09)
     if (targetClient) {
@@ -207,7 +217,7 @@ export async function restoreAccount(
       const folderFilename = folderPathToFilename(folderPath)
       const folderJsonPath = path.join(sourcePath, 'folders', `${folderFilename}.json`)
 
-      let folderState: { messages: Array<{ 'message-id': string }> }
+      let folderState: { folderPath?: string; messages: Array<{ 'message-id': string }> }
       try {
         folderState = JSON.parse(await fs.readFile(folderJsonPath, 'utf-8'))
       } catch {
