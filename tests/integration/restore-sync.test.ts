@@ -130,7 +130,7 @@ describe('REST-01: Message upload from local checkout to target', () => {
       auth: { user: IMAP_USER, pass: IMAP_PASS },
       logger: false
     })
-    targetClient.connect()
+    await targetClient.connect()
     const lock = await targetClient.getMailboxLock('INBOX')
     const search = await targetClient.search({})
     await lock.release()
@@ -228,7 +228,7 @@ describe('REST-03: Dry-run produces output without writing', () => {
       auth: { user: IMAP_USER, pass: IMAP_PASS },
       logger: false
     })
-    beforeClient.connect()
+    await beforeClient.connect()
     const beforeLock = await beforeClient.getMailboxLock('INBOX')
     const countBefore = await beforeClient.search({})
     await beforeLock.release()
@@ -253,7 +253,7 @@ describe('REST-03: Dry-run produces output without writing', () => {
       auth: { user: IMAP_USER, pass: IMAP_PASS },
       logger: false
     })
-    afterClient.connect()
+    await afterClient.connect()
     const afterLock = await afterClient.getMailboxLock('INBOX')
     const countAfter = await afterClient.search({})
     await afterLock.release()
