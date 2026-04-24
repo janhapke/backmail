@@ -30,6 +30,17 @@ function getConfig() {
 // ── Phase 3+ imports ────────────────────────────────────────────────────────
 import { syncAccount, getLog, checkoutCommit, listFolders, listMessages, viewMessage, resolveAccount, restoreAccount } from '../core/index.js'
 
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) {
+    return err.message
+  }
+  return String(err)
+}
+
+function sanitizeErrorMessage(msg: string): string {
+  return msg.replace(/(:)([^@:]+)@/g, ':***@')
+}
+
 function collectRepeatable(value: string, previous: string[]): string[] {
   return [...previous, value]
 }
@@ -256,7 +267,7 @@ program
       }
     } catch (err) {
       // D-19: Print error but never the URL with password (Pitfall 4, T-5-02)
-      const msg = (err as Error).message
+      const msg = sanitizeErrorMessage(getErrorMessage(err))
       console.error(`Restore failed: ${msg}`)
       process.exit(1)
     }
