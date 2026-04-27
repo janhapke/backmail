@@ -170,12 +170,27 @@ export async function restoreAccount(
     logger: false,  // T-3-03: MANDATORY per Phase 3
   })
 
+  // D-12: In dry-run with skip-duplicates, open a read-only connection for SEARCH only.
+  // APPEND is suppressed, but SEARCH must run to count duplicates accurately.
+  const dryRunClient = (options.dryRun && options.skipDuplicates)
+    ? new ImapFlow({
+        host: target.host,
+        port: target.port,
+        secure: target.secure,
+        auth: { user: target.username, pass: target.password },
+        logger: false,
+      })
+    : null
+
   let result: RestoreResult = { uploaded: 0, skipped: 0, errors: 0 }
 
   try {
     // Connect to target if not in dry-run mode
     if (targetClient) {
       await targetClient.connect()
+    }
+    if (dryRunClient) {
+      await dryRunClient.connect()
     }
 
     // REST-04, D-09: List all folders from folders/*.json and create them on target
@@ -235,10 +250,15 @@ export async function restoreAccount(
 
         try {
           // REST-02, D-10, D-11: Check for duplicate if skip-duplicates=yes
-          if (options.skipDuplicates && targetClient) {
-            if (await isDuplicate(targetClient, folderPath, messageId)) {
+          const searchClient = targetClient ?? dryRunClient
+          if (options.skipDuplicates && searchClient) {
+            if (await isDuplicate(searchClient, folderPath, messageId)) {
               folderSkipped++
               result.skipped++
+              if (options.verbose) {
+                // ARCH-01 exception: verbose per-message output is delegated to core (D-15)
+                console.log(`Skipped: ${messageId}`)
+              }
               continue
             }
           }
@@ -255,6 +275,9 @@ export async function restoreAccount(
               await targetClient.append(folderPath, content, [])
               folderUploaded++
               result.uploaded++
+              if (options.verbose) {
+                console.log(`Uploaded: ${messageId}`)
+              }
             } finally {
               try {
                 await lock.release()  // Pitfall 2: always release
@@ -267,12 +290,16 @@ export async function restoreAccount(
             // Dry-run: count as uploaded without actually appending (D-12)
             folderUploaded++
             result.uploaded++
+            if (options.verbose) {
+              console.log(`Uploaded: ${messageId}`)
+            }
           }
-
-          // D-15: Per-message verbose output (handled by CLI layer, not core)
         } catch (err) {
           // D-17: Per-message error: continue (do not abort)
           result.errors++
+          if (options.verbose) {
+            console.log(`Error: ${messageId}`)
+          }
         }
       }
 
@@ -284,6 +311,9 @@ export async function restoreAccount(
     // Always logout and cleanup (from sync.ts pattern)
     if (targetClient) {
       await targetClient.logout().catch(() => {})
+    }
+    if (dryRunClient) {
+      await dryRunClient.logout().catch(() => {})
     }
   }
 }
