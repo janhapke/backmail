@@ -99,9 +99,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — Test infrastructure (tests/unit/restore.test.ts, tests/integration/restore-sync.test.ts, tests/integration/cli-restore.test.ts with RED test stubs)
-- [ ] 05-02-PLAN.md — Core restore module (src/core/restore.ts: restoreAccount + URL parsing + duplicate checking; re-exports via src/core/index.ts)
-- [ ] 05-03-PLAN.md — CLI restore subcommand (src/cli/index.ts: restore [<date|commit>] --to with options and output formatting)
+- [x] 05-01-PLAN.md — Test infrastructure (tests/unit/restore.test.ts, tests/integration/restore-sync.test.ts, tests/integration/cli-restore.test.ts with RED test stubs)
+- [x] 05-02-PLAN.md — Core restore module (src/core/restore.ts: restoreAccount + URL parsing + duplicate checking; re-exports via src/core/index.ts)
+- [x] 05-03-PLAN.md — CLI restore subcommand (src/cli/index.ts: restore [<date|commit>] --to with options and output formatting)
 
 ### Phase 6: Packaging
 **Goal**: backmail is installable from npm globally and via npx, and self-contained binaries are published for macOS, Windows, and Linux
