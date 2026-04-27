@@ -1,5 +1,5 @@
 ---
-status: complete
+status: resolved
 phase: 05-restore
 source: [05-01-SUMMARY.md, 05-02-SUMMARY.md, 05-03-SUMMARY.md, 05-GAP-SUMMARY.md, 05-GAP2-SUMMARY.md]
 started: 2026-04-24T10:00:00Z
@@ -62,21 +62,29 @@ blocked: 0
 ## Gaps
 
 - truth: "dry-run with --skip-duplicates=yes should detect existing messages on target and report them as skipped, matching live-run behavior"
-  status: failed
+  status: resolved
   reason: "User reported: the skip-duplicates flag does not seem to have any effect on the dry-run. whether the flag is set to 'yes' or 'no' or omitted entirely, it always says '[dry-run] Total: 16 uploaded, 0 skipped'. when I run restore without dry-run, it correctly outputs 'Total: 3 uploaded, 13 skipped'. the dry-run should correctly detect duplicates and report that it would skip them."
   severity: major
   test: 5
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "dry-run sets targetClient=null (line 165 of restore.ts) to avoid APPEND writes, but the duplicate check on line 238 gates on `skipDuplicates && targetClient`, so it short-circuits to false and isDuplicate() never runs — skipped count stays 0"
+  artifacts:
+    - path: "src/core/restore.ts"
+      issue: "line 165: targetClient=null in dry-run; line 238: duplicate check condition short-circuits when targetClient is null"
+  missing:
+    - "Create a separate read-only IMAP connection (or reuse targetClient) for duplicate SEARCH even in dry-run mode, and only skip the APPEND call"
   debug_session: ""
 
 - truth: "--verbose flag should produce per-message detail lines during restore (e.g. 'Uploaded: <message-id>' or 'Skipped: <message-id>' for each message processed)"
-  status: failed
+  status: resolved
   reason: "User reported: there are no per-message detail lines, only the final summary"
   severity: major
   test: 8
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "options.verbose is accepted by restoreAccount() but never used — no if (options.verbose) logging exists inside the message processing loop (lines 233-277 of restore.ts); comments say 'handled by CLI layer' but the CLI layer also never implements it"
+  artifacts:
+    - path: "src/core/restore.ts"
+      issue: "message processing loop (lines 233-277) never references options.verbose; no per-message output emitted"
+    - path: "src/cli/index.ts"
+      issue: "restore action handler only prints final summary, no per-message lines"
+  missing:
+    - "Add if (options.verbose) { console.log(`Uploaded: ${messageId}`) } after successful append and if (options.verbose) { console.log(`Skipped: ${messageId}`) } after duplicate skip in restore.ts"
   debug_session: ""
