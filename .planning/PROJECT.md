@@ -1,8 +1,20 @@
 # backmail
 
+## Current Milestone: v1.1 — Repository-Centric UX
+
+**Goal:** Replace the central config model with self-contained "backmail repositories" and redesign the CLI around them for a far more intuitive user experience.
+
+**Target features:**
+- `backmail init` creates a backmail repository with a well-defined directory layout
+- Git-style auto-detection: commands find the repo by walking up from CWD for `.backmail/`
+- `--workdir <path>` global flag to explicitly target a different repository
+- Password stored in OS keyring during `init`, referenced in config as `keyring:service=X;account=Y`
+- `BACKMAIL_PASSWORD` env var as fallback
+- All existing commands (sync, log, ls, view, checkout, restore) work with the new structure
+
 ## What This Is
 
-A TypeScript CLI that periodically mirrors one or more IMAP mailboxes to plaintext `.eml` files versioned in git. Each git repo is one mailbox backup — the git history is the archive. Users can browse email state at any point in time, restore a full inbox to a different IMAP provider, and eventually query their email through an AI-accessible MCP server.
+A TypeScript CLI that mirrors IMAP mailboxes into self-contained "backmail repositories" — directories with a git archive, config, and worktrees all in one place. The git history is the backup. Users can browse email at any point in time, restore to a new provider, and run commands from inside the repo like they would with git.
 
 Primary user is the developer (Jan) building it. Target evolution: developer-friendly first, then power users, then anyone with email.
 
@@ -14,22 +26,26 @@ The git repo IS the backup — point-in-time restore, local search, and provider
 
 ### Validated
 
-- [x] User can configure one or more IMAP accounts in `~/.config/backmail/config.json` (OS-appropriate path) — Validated in Phase 2: Configuration
+- ✓ `backmail sync` performs incremental IMAP fetch and commits a delta to the git repo — Phase 3
+- ✓ Sync mirrors deletions — emails removed from IMAP are removed from the repo (git history retains them) — Phase 3
+- ✓ Storage layout: `messages/<message-id>.eml` + `folders/<name>.json` (uidvalidity + uid/message-id/flags) — Phase 3
+- ✓ `backmail log` lists sync commits with date and `+added / -removed` counts — Phase 4
+- ✓ `backmail checkout <date|commit>` creates a git worktree non-destructively — Phase 4
+- ✓ `backmail ls [folder]` lists folders or messages — Phase 4
+- ✓ `backmail view <message-id> --format [eml|plaintext|json]` renders an email — Phase 4
+- ✓ `backmail restore --to <imap-url>` re-uploads messages with skip-duplicates and dry-run — Phase 5
 
 ### Active
 
-- [ ] User can configure one or more IMAP accounts in `~/.config/backmail/config.json` (OS-appropriate path)
-- [ ] `backmail sync` performs incremental IMAP fetch and commits a delta to the git repo
-- [ ] Sync mirrors deletions — emails removed from IMAP are removed from the repo (git history still has them)
-- [ ] `backmail log` lists sync commits with date and `+added / -removed` counts
-- [ ] `backmail checkout <date|commit>` creates a git worktree at that point in time (non-destructive, never detaches HEAD)
-- [ ] `backmail ls [folder]` lists folders or messages at current checkout
-- [ ] `backmail view <message-id> --format [eml|plaintext|json]` renders an email
-- [ ] `backmail restore --to imap://user:pass@host [--skip-duplicates=yes/no] [--dry-run]` re-uploads messages to a target IMAP server
-- [ ] Restore defaults to skip-duplicates=yes (checks Message-ID before APPEND); dry-run shows what would be uploaded
-- [ ] Storage layout: `messages/<message-id>.eml` + `folders/<name>.json` (uidvalidity + uid/message-id/flags array)
-- [ ] Installable via `npm install -g backmail`, `npx backmail`, and compiled binary
-- [ ] Core sync logic is a clean TypeScript module with a well-defined API (eimerjs IPC boundary for future Electron integration)
+- [ ] `backmail init` creates a backmail repository (`.backmail/config.json`, `.backmail/log`, `archive/` git repo, `worktrees/`)
+- [ ] `init` prompts interactively for any parameters not supplied as CLI flags; accepts all params as flags for full automation
+- [ ] `init` stores the password in the OS keyring and writes a `passwordRef` into config.json
+- [ ] `passwordRef` format: `"keyring:service=backmail;account=<username>"` (extensible — parser also handles `env:VAR`)
+- [ ] `BACKMAIL_PASSWORD` env var accepted as password fallback (no keyring required)
+- [ ] Commands auto-detect the backmail repository by walking up from CWD looking for `.backmail/`
+- [ ] `--workdir <path>` global flag overrides auto-detection for all commands
+- [ ] All existing commands (sync, log, ls, view, checkout, restore) work correctly with the new repository structure
+- [ ] Core sync logic remains a clean TypeScript module (eimerjs IPC boundary for future Electron integration)
 
 ### Out of Scope
 
@@ -62,11 +78,15 @@ The git repo IS the backup — point-in-time restore, local search, and provider
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
 | `.eml` files as source of truth; markdown exports are derived/cache | Keeps git repo as canonical archive; cache can be regenerated | — Pending |
-| Message-ID as filename | Enables git-level dedup, stable cross-folder references | — Pending |
-| One git repo per mailbox (not per account) | Clean separation; easy to move, clone, or archive a single mailbox | — Pending |
-| `git worktree` for `checkout` (not detach HEAD) | Non-destructive — sync continues to work while user browses history | — Pending |
+| Message-ID as filename | Enables git-level dedup, stable cross-folder references | ✓ Good |
+| One git repo per mailbox (not per account) | Clean separation; easy to move, clone, or archive a single mailbox | ✓ Good |
+| `git worktree` for `checkout` (not detach HEAD) | Non-destructive — sync continues to work while user browses history | ✓ Good |
 | Plugins deferred to v2 | Keeps v1 scope tight; plugins depend on a stable core sync API | — Pending |
 | Plain IMAP only v1 | App passwords cover Gmail; OAuth is a significant auth flow to build and maintain | — Pending |
+| Central `~/.config/backmail/config.json` replaced by per-repo `.backmail/` | Central registry was non-obvious; per-repo structure is self-contained and git-like | v1.1 |
+| `.backmail/` as repository marker (like `.git/`) | Git muscle memory; walk-up detection works naturally from any subdirectory | v1.1 |
+| `archive/` subdirectory holds the git repo | Keeps `.backmail/` and `worktrees/` outside version control without a `.gitignore` hack | v1.1 |
+| `passwordRef` format: `keyring:service=X;account=Y` | Self-documenting, parseable, extensible to `env:VAR` without breaking existing configs | v1.1 |
 
 ## Evolution
 
@@ -86,4 +106,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-21 — Phase 2 complete (config module, CLI wiring, credential storage)*
+*Last updated: 2026-04-28 — Milestone v1.1 started (repository-centric UX)*
