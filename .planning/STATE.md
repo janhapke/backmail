@@ -5,9 +5,9 @@ milestone_name: Repository-Centric UX
 status: planning
 stopped_at: ~
 last_updated: "2026-04-28T00:00:00.000Z"
-last_activity: 2026-04-28 -- Milestone v1.1 started
+last_activity: 2026-04-28 -- Milestone v1.1 roadmap created (4 phases, 13 requirements)
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-28)
 
 **Core value:** The git repo IS the backup — point-in-time restore, local search, and provider independence without trusting any third-party service.
-**Current focus:** Milestone v1.1 — Repository-Centric UX (defining requirements)
+**Current focus:** Milestone v1.1 — Repository-Centric UX (roadmap defined, ready to plan Phase 6)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Phase 6 — Credential Infrastructure (not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-04-28 -- Milestone v1.1 started
+Status: Roadmap defined
+Last activity: 2026-04-28 -- v1.1 roadmap written (phases 6–9)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -48,7 +48,8 @@ Carried over from v1.0:
 
 New in v1.1:
 - Repository structure: `.backmail/` marker + `archive/` git repo + `worktrees/` (all siblings)
-- passwordRef format: `keyring:service=backmail;account=<username>`
+- passwordRef format: `keyring:service=backmail;account=<username>` (extensible — parser also handles `env:VAR`)
+- Build order: credential infrastructure → discovery → command migration → init command
 
 ### Pending Todos
 

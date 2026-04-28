@@ -78,28 +78,26 @@
 
 ## Traceability
 
-*Filled in by roadmapper.*
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| REPO-01 | TBD | Pending |
-| REPO-02 | TBD | Pending |
-| REPO-03 | TBD | Pending |
-| REPO-04 | TBD | Pending |
-| REPO-05 | TBD | Pending |
-| DISC-01 | TBD | Pending |
-| DISC-02 | TBD | Pending |
-| DISC-03 | TBD | Pending |
-| CRED-01 | TBD | Pending |
-| CRED-02 | TBD | Pending |
-| CRED-03 | TBD | Pending |
-| CMD-01 | TBD | Pending |
-| CMD-02 | TBD | Pending |
+| REPO-01 | Phase 9 | Pending |
+| REPO-02 | Phase 9 | Pending |
+| REPO-03 | Phase 9 | Pending |
+| REPO-04 | Phase 9 | Pending |
+| REPO-05 | Phase 9 | Pending |
+| DISC-01 | Phase 7 | Pending |
+| DISC-02 | Phase 7 | Pending |
+| DISC-03 | Phase 7 | Pending |
+| CRED-01 | Phase 6 | Pending |
+| CRED-02 | Phase 6 | Pending |
+| CRED-03 | Phase 6 | Pending |
+| CMD-01 | Phase 8 | Pending |
+| CMD-02 | Phase 8 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 13 total
-- Mapped to phases: 0 (roadmapper will fill)
-- Unmapped: 13 ⚠️
+- Mapped to phases: 13
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-04-20*
