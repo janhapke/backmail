@@ -12,9 +12,9 @@ backmail is a TypeScript CLI that backs up IMAP mailboxes to git repos. The path
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [x] **Phase 1: Foundation** - Project scaffold, clean module architecture, and integration test infrastructure *(completed 2026-04-20)*
-- [x] **Phase 2: Configuration** - IMAP account config with OS-aware paths and secure credential storage *(completed 2026-04-21)*
-- [x] **Phase 3: Sync** - Incremental IMAP fetch writing `.eml` files and committing deltas to git *(completed 2026-04-22)*
+- [x] **Phase 1: Foundation** - Project scaffold, clean module architecture, and integration test infrastructure *(completed 2006-04-20)*
+- [x] **Phase 2: Configuration** - IMAP account config with OS-aware paths and secure credential storage *(completed 2006-04-21)*
+- [x] **Phase 3: Sync** - Incremental IMAP fetch writing `.eml` files and committing deltas to git *(completed 2006-04-22)*
 - [ ] **Phase 4: Browse** - Read-only navigation of backup history via log, checkout, ls, and view commands
 - [ ] **Phase 5: Restore** - Re-upload messages from a checkout to a target IMAP server
 - [ ] **Phase 6: Packaging** - Cross-platform distribution via npm, npx, and compiled binaries
@@ -126,9 +126,9 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 4/4 | Complete | 2026-04-20 |
-| 2. Configuration | 3/3 | Complete | 2026-04-21 |
-| 3. Sync | 3/3 | Complete | 2026-04-22 |
+| 1. Foundation | 4/4 | Complete | 2006-04-20 |
+| 2. Configuration | 3/3 | Complete | 2006-04-21 |
+| 3. Sync | 3/3 | Complete | 2006-04-22 |
 | 4. Browse | 0/3 | Planned | - |
 | 5. Restore | 0/3 | Planned | - |
 | 6. Packaging | 0/3 | Not started | - |

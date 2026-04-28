@@ -7,6 +7,7 @@ depends_on: [GAP]
 files_modified:
   - tests/integration/restore-sync.test.ts
   - tests/integration/cli-restore.test.ts
+  - src/core/sync.ts
   - src/core/restore.ts
   - src/cli/index.ts
 autonomous: true
@@ -109,16 +110,57 @@ After making these changes, integration tests will no longer hang or fail due to
 
 <task type="auto">
   <name>Task 2: Fix folder path reconstruction by storing original folderPath in JSON metadata (CR-02)</name>
-  <files>src/core/restore.ts</files>
-  <read_first>src/core/restore.ts (lines 182-191, 206-216, 237) to understand folder state reading and path reconstruction</read_first>
+  <files>src/core/sync.ts, src/core/restore.ts</files>
+  <read_first>
+    - src/core/sync.ts (lines 44-49 for FolderState interface, line 348-353 for where updatedState is written)
+    - src/core/restore.ts (lines 182-191, 206-216 for folder reconstruction and folderState reading)
+  </read_first>
   <action>
 The current folder path reconstruction logic (line 190: f.replace(/_/g, '/')) is broken because it cannot distinguish between underscores that are part of the folder name (e.g., Archive_2024 → Archive/2024 incorrectly) and underscores that represent folder path separators.
 
-Solution: When reading the folder state JSON, extract the original folderPath field directly instead of reverse-engineering from filename.
+The fix requires changes in BOTH sync.ts (write folderPath when saving state) AND restore.ts (read folderPath instead of reverse-engineering filename).
 
-Step 1: Understand the folder state JSON structure from sync.ts. The folders/*.json files are written by Phase 3's sync logic. They should include a folderPath field.
+**Part A: Update sync.ts to write folderPath in folder state**
 
-Step 2: In restoreAccount(), when reading folderState at lines 210-216, change the type annotation to include folderPath:
+Step 1: In src/core/sync.ts, find the FolderState interface (around lines 44-49):
+```typescript
+interface FolderState {
+  uidvalidity: string
+  uidnext: number
+  messages: FolderMessage[]
+}
+```
+Add `folderPath` field:
+```typescript
+interface FolderState {
+  folderPath: string
+  uidvalidity: string
+  uidnext: number
+  messages: FolderMessage[]
+}
+```
+
+Step 2: In sync.ts around line 348, find the `updatedState` object construction:
+```typescript
+const updatedState: FolderState = {
+  uidvalidity: currentState.uidvalidity ?? String(mailboxInfo.uidValidity),
+  uidnext: ...,
+  messages: [...keptMessages, ...newMessages],
+}
+```
+Add `folderPath: folder.path` as the first field:
+```typescript
+const updatedState: FolderState = {
+  folderPath: folder.path,
+  uidvalidity: currentState.uidvalidity ?? String(mailboxInfo.uidValidity),
+  uidnext: ...,
+  messages: [...keptMessages, ...newMessages],
+}
+```
+
+**Part B: Update restore.ts to read folderPath from JSON**
+
+Step 3: In restoreAccount(), when reading folderState at lines 210-216, change the type annotation to include folderPath:
 
 FROM:
   let folderState: { messages: Array<{ 'message-id': string }> }
@@ -178,13 +220,15 @@ The key insight is that we're now reading folder paths from the source of truth 
     <automated>grep -n "folderPath" src/core/restore.ts | head -5</automated>
   </verify>
   <acceptance_criteria>
+    - src/core/sync.ts FolderState interface includes folderPath: string field
+    - src/core/sync.ts updatedState object includes folderPath: folder.path
     - src/core/restore.ts type annotation includes folderPath field: "folderState: { folderPath?: string"
     - Folder path reconstruction logic reads from folderStateData.folderPath when available
     - Fallback logic still uses filename reversal for backward compatibility with legacy state files
-    - No f.replace(/_/g, '/') logic remains in the main folder path reconstruction section (moved to fallback only)
-    - The message restoration loop still uses the folderPath variable from the reconstructed array
+    - grep "folderPath" src/core/sync.ts returns at least 2 matches (interface + updatedState)
+    - grep "folderPath" src/core/restore.ts returns at least 2 matches (type + read)
   </acceptance_criteria>
-  <done>Folder paths with underscores now restore correctly; stored metadata is read instead of reverse-engineered</done>
+  <done>sync.ts now writes folderPath to JSON; restore.ts reads it directly — folders with underscores restore correctly</done>
 </task>
 
 <task type="auto">

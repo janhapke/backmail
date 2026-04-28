@@ -7,7 +7,7 @@ stopped_at: Phase 5 complete
 last_updated: "2026-04-28T00:00:00.000Z"
 last_activity: 2026-04-28 -- Phase 05 restore complete
 progress:
-  total_phases: 6
+  total_phases: 5
   completed_phases: 5
   total_plans: 18
   completed_plans: 18
