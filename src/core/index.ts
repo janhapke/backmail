@@ -20,6 +20,9 @@ export async function ping(_config: unknown): Promise<boolean> {
 export type { RepositoryConfig, PasswordRef } from './config.js'
 export { loadRepositoryConfig, parsePasswordRef, getPasswordByRef } from './config.js'
 
+// Phase 7: Repository discovery public API
+export { findRepository } from './discovery.js'
+
 // Phase 3: Sync module public API
 export type { SyncResult, SyncOptions, FolderSyncResult } from './sync.js'
 export { syncAccount } from './sync.js'
