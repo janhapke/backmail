@@ -135,7 +135,11 @@ Plans:
   1. Running any command from inside a backmail repo (or any subdirectory) finds the `.backmail/` directory without any explicit path argument
   2. `backmail --workdir /path/to/repo log` targets the specified repo regardless of CWD
   3. Running a command outside any backmail repo with no `--workdir` prints a clear "not inside a backmail repository" error and exits non-zero
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 07-01-PLAN.md — Core discovery module (src/core/discovery.ts: findRepository), re-export in src/core/index.ts, unit tests
+- [ ] 07-02-PLAN.md — CLI migration (src/cli/index.ts: --workdir global flag, getRepoRoot helper, all commands use archivePath)
 
 ### Phase 8: Command Migration
 **Goal**: All existing commands (sync, log, ls, view, checkout, restore) work correctly against the new repository structure, deriving the git repo path from `archive/` and requiring no account registry
@@ -172,6 +176,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 4. Browse | 3/3 | Complete | - |
 | 5. Restore | 3/3 | Complete | - |
 | 6. Credential Infrastructure | 0/2 | Not started | - |
-| 7. Repository Discovery | 0/? | Not started | - |
+| 7. Repository Discovery | 0/2 | Not started | - |
 | 8. Command Migration | 0/? | Not started | - |
 | 9. Init Command | 0/? | Not started | - |
