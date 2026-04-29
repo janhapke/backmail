@@ -149,7 +149,11 @@ Plans:
   1. `backmail sync` runs to completion inside a repo created by `backmail init`, writing commits into `archive/` without any `--account` flag
   2. `backmail log`, `backmail ls`, `backmail view`, `backmail checkout`, and `backmail restore` all operate correctly against the `archive/` git repo derived from the discovered repo root
   3. Passing `--account` to any command produces a "flag removed" error or is silently ignored with a deprecation warning — the central config file is no longer consulted
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 08-01-PLAN.md — Delete legacy account types and resolveAccount from browse.ts, core/index.ts, and browse.test.ts
+- [ ] 08-02-PLAN.md — Remove accounts command, --account options, --all on sync, and getConfig helper from cli/index.ts
 
 ### Phase 9: Init Command
 **Goal**: Users can run `backmail init` to create a fully functional backmail repository with interactive prompts, keyring credential storage, and CI-safe flag-only mode
@@ -177,5 +181,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 5. Restore | 3/3 | Complete | - |
 | 6. Credential Infrastructure | 0/2 | Not started | - |
 | 7. Repository Discovery | 2/2 | Complete    | 2026-04-29 |
-| 8. Command Migration | 0/? | Not started | - |
+| 8. Command Migration | 0/2 | Not started | - |
 | 9. Init Command | 0/? | Not started | - |
