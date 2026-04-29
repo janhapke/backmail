@@ -21,54 +21,6 @@ export interface MessageSummary {
   subject: string
 }
 
-// ── Legacy types (kept for Phase 8 removal) ──────────────────────────────────
-
-/** @deprecated Replaced by per-repo RepositoryConfig in v1.1 */
-export interface LegacyAccountConfig {
-  host: string
-  port: number
-  username: string
-  tls: boolean
-  repoPath: string
-}
-
-/** @deprecated Replaced by per-repo RepositoryConfig in v1.1 */
-export interface LegacyBackmailConfig {
-  accounts: Record<string, LegacyAccountConfig>
-}
-
-// ── Account Resolution (D-01, D-02) ───────────────────────────────────────────
-
-/**
- * @deprecated Resolve account name to AccountConfig (legacy multi-account model).
- * Kept for Phase 8 removal. CLI command actions no longer call this.
- */
-export function resolveAccount(
-  config: LegacyBackmailConfig,
-  accountName?: string
-): [string, LegacyAccountConfig] {
-  if (accountName) {
-    const acc = config.accounts[accountName]
-    if (!acc) {
-      throw new Error(`Unknown account: ${accountName}`)
-    }
-    return [accountName, acc]
-  }
-
-  const names = Object.keys(config.accounts)
-  if (names.length === 1) {
-    return [names[0], config.accounts[names[0]]]
-  }
-
-  if (names.length === 0) {
-    throw new Error('No accounts configured')
-  }
-
-  throw new Error(
-    `Multiple accounts configured. Specify one with --account:\n  ${names.join('\n  ')}`
-  )
-}
-
 // ── Helper Functions (Task 1) ───────────────────────────────────────────────
 
 /**
