@@ -7,26 +7,18 @@
 //   - No readline or interactive I/O
 // All relative imports within src/core/ must use .js extension (nodenext moduleResolution).
 
-export interface AccountConfig {
-  host: string
-  port: number
-  username: string
-  tls: boolean
-  repoPath: string
-}
-
 /**
  * Stub: verify connectivity to an IMAP server.
  * Real implementation arrives in Phase 2 when imapflow is added.
  * Throws 'Not implemented' in Phase 1 — tests only verify the export shape.
  */
-export async function ping(_config: AccountConfig): Promise<boolean> {
+export async function ping(_config: unknown): Promise<boolean> {
   throw new Error('Not implemented')
 }
 
-// Phase 2: Config module public API
-export type { BackmailConfig } from './config.js'
-export { getConfigPath, loadConfig, getPassword } from './config.js'
+// Phase 6: Repository config public API (replaces Phase 2 config exports)
+export type { RepositoryConfig, PasswordRef } from './config.js'
+export { loadRepositoryConfig, parsePasswordRef, getPasswordByRef } from './config.js'
 
 // Phase 3: Sync module public API
 export type { SyncResult, SyncOptions, FolderSyncResult } from './sync.js'
