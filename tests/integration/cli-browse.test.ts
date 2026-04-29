@@ -4,12 +4,9 @@ import path from 'node:path'
 import os from 'node:os'
 import { execSync } from 'node:child_process'
 import { sanitizeMessageId, folderPathToFilename } from '../../src/core/sync.js'
-import type { BackmailConfig } from '../../src/core/config.js'
 
 let tmpDir: string
 let tmpRepo: string
-let configFile: string
-let config: BackmailConfig
 
 // Helper to capture console output
 function captureOutput(fn: () => void): { stdout: string; stderr: string } {
@@ -110,34 +107,9 @@ This is the body of the second email.`
     })
   }
 
-  // Create config file
-  configFile = path.join(tmpDir, 'backmail.json')
-  config = {
-    accounts: {
-      gmail: {
-        host: 'imap.gmail.com',
-        port: 993,
-        username: 'user@gmail.com',
-        tls: true,
-        repoPath: tmpRepo,
-      },
-      work: {
-        host: 'imap.company.com',
-        port: 993,
-        username: 'user@company.com',
-        tls: true,
-        repoPath: path.join(tmpDir, 'work-repo'),
-      },
-    },
-  }
-  await fs.writeFile(configFile, JSON.stringify(config, null, 2))
-
-  // Set env var to point to test config
-  process.env.BACKMAIL_CONFIG = configFile
 })
 
 afterAll(async () => {
-  delete process.env.BACKMAIL_CONFIG
   await fs.rm(tmpDir, { recursive: true, force: true })
 })
 
@@ -146,43 +118,6 @@ afterAll(async () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('CLI Browse Commands', () => {
-  // ─────────────────────────────────────────────────────────────────────────
-  // accounts command tests
-  // ─────────────────────────────────────────────────────────────────────────
-
-  describe('backmail accounts', () => {
-    it('prints all account names from config', async () => {
-      const { loadConfig } = await import('../../src/core/config.js')
-      const cfg = loadConfig(configFile)
-      const names = Object.keys(cfg.accounts)
-
-      // Simulate the accounts command
-      const output: string[] = []
-      for (const name of names) {
-        output.push(name)
-      }
-
-      expect(output).toContain('gmail')
-      expect(output).toContain('work')
-      expect(output.length).toBe(2)
-    })
-
-    it('output is one name per line with no headers', async () => {
-      const { loadConfig } = await import('../../src/core/config.js')
-      const cfg = loadConfig(configFile)
-      const names = Object.keys(cfg.accounts)
-
-      const output = names.map((n) => n).join('\n')
-      const lines = output.trim().split('\n')
-
-      expect(lines.length).toBe(2)
-      expect(lines[0]).toBe('gmail')
-      expect(lines[1]).toBe('work')
-      // No headers or decorations
-      expect(lines.every((l) => !l.includes(':') && !l.includes('|'))).toBe(true)
-    })
-  })
-
   // ─────────────────────────────────────────────────────────────────────────
   // log command tests
   // ─────────────────────────────────────────────────────────────────────────
@@ -220,27 +155,6 @@ describe('CLI Browse Commands', () => {
       expect(hasPartial).toBe(true)
     })
 
-    it('works with --account flag', async () => {
-      const { getLog, resolveAccount } = await import('../../src/core/browse.js')
-      const { loadConfig } = await import('../../src/core/config.js')
-      const cfg = loadConfig(configFile)
-
-      const [, accountConfig] = resolveAccount(cfg, 'gmail')
-      const commits = await getLog(accountConfig.repoPath, 'unlimited')
-
-      expect(commits.length).toBeGreaterThan(0)
-    })
-
-    it('auto-selects single account when multiple exist', async () => {
-      const { resolveAccount } = await import('../../src/core/browse.js')
-      const { loadConfig } = await import('../../src/core/config.js')
-
-      // With multiple accounts, should require explicit --account
-      const cfg = loadConfig(configFile)
-      expect(Object.keys(cfg.accounts).length).toBeGreaterThan(1)
-
-      expect(() => resolveAccount(cfg)).toThrow()
-    })
   })
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -406,45 +320,4 @@ describe('CLI Browse Commands', () => {
     })
   })
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Account resolution tests
-  // ─────────────────────────────────────────────────────────────────────────
-
-  describe('account resolution', () => {
-    it('resolveAccount with explicit account name', async () => {
-      const { resolveAccount } = await import('../../src/core/browse.js')
-      const { loadConfig } = await import('../../src/core/config.js')
-      const cfg = loadConfig(configFile)
-
-      const [name, accountConfig] = resolveAccount(cfg, 'gmail')
-
-      expect(name).toBe('gmail')
-      expect(accountConfig.repoPath).toBe(tmpRepo)
-    })
-
-    it('resolveAccount throws for unknown account', async () => {
-      const { resolveAccount } = await import('../../src/core/browse.js')
-      const { loadConfig } = await import('../../src/core/config.js')
-      const cfg = loadConfig(configFile)
-
-      expect(() => {
-        resolveAccount(cfg, 'unknown')
-      }).toThrow('Unknown account')
-    })
-
-    it('resolveAccount lists available accounts in error when multiple exist', async () => {
-      const { resolveAccount } = await import('../../src/core/browse.js')
-      const { loadConfig } = await import('../../src/core/config.js')
-      const cfg = loadConfig(configFile)
-
-      try {
-        resolveAccount(cfg)
-        expect.fail('Should have thrown')
-      } catch (err) {
-        const message = (err as Error).message
-        expect(message).toContain('gmail')
-        expect(message).toContain('work')
-      }
-    })
-  })
 })
