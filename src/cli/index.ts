@@ -34,19 +34,8 @@ function getRepoRoot(): string {
   return repoRoot
 }
 
-// Helper to load repository config using discovered root
-function getConfig(): RepositoryConfig {
-  try {
-    const repoRoot = getRepoRoot()
-    return loadRepositoryConfig(repoRoot)
-  } catch (err) {
-    console.error((err as Error).message)
-    process.exit(1)
-  }
-}
-
 // ── Phase 3+ imports ────────────────────────────────────────────────────────
-import { syncAccount, getLog, checkoutCommit, listFolders, listMessages, viewMessage, resolveAccount, restoreAccount } from '../core/index.js'
+import { syncAccount, getLog, checkoutCommit, listFolders, listMessages, viewMessage, restoreAccount } from '../core/index.js'
 
 function getErrorMessage(err: unknown): string {
   if (err instanceof Error) {
@@ -110,15 +99,6 @@ program
       console.error((err as Error).message)
       process.exit(1)
     }
-  })
-
-// ── Phase 4: accounts subcommand ─────────────────────────────────────────────
-program
-  .command('accounts')
-  .description('List all configured IMAP accounts')
-  .action(() => {
-    const config = getConfig()
-    console.log(config.username)
   })
 
 // ── Phase 4: log subcommand ─────────────────────────────────────────────────
