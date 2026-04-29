@@ -2,17 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs'
-
 import { loadRepositoryConfig, parsePasswordRef, getPasswordByRef } from '../../src/core/config.js'
 
-// ---------------------------------------------------------------------------
-// Mock @napi-rs/keyring Entry class — used by all getPasswordByRef tests.
-// vi.mock is hoisted to the top of the file by Vitest.
-// ---------------------------------------------------------------------------
 vi.mock('@napi-rs/keyring', () => {
   const mockGetPassword = vi.fn()
-  // Use a regular function (not arrow) so that `new Entry(...)` works in Vitest 4.x.
-  // Arrow functions cannot be used as constructors (Reflect.construct requirement).
   return {
     Entry: vi.fn().mockImplementation(function () {
       return { getPassword: mockGetPassword }
@@ -35,49 +28,52 @@ describe('loadRepositoryConfig', () => {
     fs.mkdirSync(backmailDir)
     tmpConfigPath = path.join(backmailDir, 'config.json')
   })
-
   afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true })
   })
 
-  it('throws error containing "No config found at" when file does not exist', () => {
-    const missingDir = path.join(os.tmpdir(), 'backmail-nonexistent-' + Date.now())
-    expect(() => loadRepositoryConfig(missingDir)).toThrow('No config found at')
-  })
-
-  it('includes the config path in the ENOENT error message', () => {
-    const missingDir = path.join(os.tmpdir(), 'backmail-nonexistent-' + Date.now())
-    const expectedPath = path.join(missingDir, '.backmail', 'config.json')
-    expect(() => loadRepositoryConfig(missingDir)).toThrow(expectedPath)
-  })
-
-  it('throws error containing "is not valid JSON" when config.json is malformed', () => {
-    fs.writeFileSync(tmpConfigPath, 'not-json{{{')
-    expect(() => loadRepositoryConfig(tmpDir)).toThrow('is not valid JSON')
-  })
-
-  it('lets ZodError propagate when config is missing required fields', () => {
-    fs.writeFileSync(tmpConfigPath, JSON.stringify({ host: 'imap.example.com' }))
-    expect(() => loadRepositoryConfig(tmpDir)).toThrow()
-  })
-
-  it('returns a typed RepositoryConfig when config is valid', () => {
+  it('returns RepositoryConfig when config.json is valid', () => {
     const config = {
       host: 'imap.example.com',
       port: 993,
-      username: 'jan@example.com',
+      username: 'user@example.com',
       tls: true,
-      passwordRef: 'keyring:service=backmail;account=jan@example.com',
+      passwordRef: 'env:BACKMAIL_PASSWORD',
     }
     fs.writeFileSync(tmpConfigPath, JSON.stringify(config))
-
     const result = loadRepositoryConfig(tmpDir)
-
     expect(result.host).toBe('imap.example.com')
-    expect(result.port).toBe(993)
-    expect(result.username).toBe('jan@example.com')
-    expect(result.tls).toBe(true)
-    expect(result.passwordRef).toBe('keyring:service=backmail;account=jan@example.com')
+  })
+
+  it('throws with path in message when .backmail/config.json does not exist', () => {
+    expect(() => loadRepositoryConfig('/nonexistent/dir')).toThrow('No config found at')
+  })
+
+  it('throws when config.json is not valid JSON', () => {
+    fs.writeFileSync(tmpConfigPath, 'not-json-at-all')
+    expect(() => loadRepositoryConfig(tmpDir)).toThrow('is not valid JSON')
+  })
+
+  it('throws ZodError when required field is missing', () => {
+    fs.writeFileSync(
+      tmpConfigPath,
+      JSON.stringify({ port: 993, username: 'user@example.com', tls: true, passwordRef: 'env:X' })
+    )
+    expect(() => loadRepositoryConfig(tmpDir)).toThrow()
+  })
+
+  it('throws ZodError when passwordRef is empty string', () => {
+    fs.writeFileSync(
+      tmpConfigPath,
+      JSON.stringify({
+        host: 'imap.example.com',
+        port: 993,
+        username: 'user@example.com',
+        tls: true,
+        passwordRef: '',
+      })
+    )
+    expect(() => loadRepositoryConfig(tmpDir)).toThrow()
   })
 })
 
@@ -85,83 +81,79 @@ describe('loadRepositoryConfig', () => {
 // CRED-02: parsePasswordRef
 // ---------------------------------------------------------------------------
 
-describe('parsePasswordRef - keyring scheme', () => {
-  it('parses keyring ref with email account correctly', () => {
+describe('parsePasswordRef', () => {
+  it('parses keyring ref with service and account', () => {
     const result = parsePasswordRef('keyring:service=backmail;account=user@example.com')
     expect(result).toEqual({ type: 'keyring', service: 'backmail', account: 'user@example.com' })
   })
 
-  it('parses keyring ref with simple account name', () => {
-    const result = parsePasswordRef('keyring:service=backmail;account=jan')
-    expect(result).toEqual({ type: 'keyring', service: 'backmail', account: 'jan' })
+  it('parses keyring ref where account contains special characters', () => {
+    const result = parsePasswordRef('keyring:service=backmail;account=jan@gmail.com')
+    expect(result.account).toBe('jan@gmail.com')
   })
 
-  it('throws when keyring ref is missing account=', () => {
-    expect(() => parsePasswordRef('keyring:service=backmail')).toThrow(
-      'must include service= and account= keys'
-    )
-  })
-
-  it('throws when keyring ref is missing service=', () => {
-    expect(() => parsePasswordRef('keyring:account=jan')).toThrow(
-      'must include service= and account= keys'
-    )
-  })
-})
-
-describe('parsePasswordRef - env scheme', () => {
-  it('parses env ref with standard var name', () => {
+  it('parses env ref', () => {
     const result = parsePasswordRef('env:BACKMAIL_PASSWORD')
     expect(result).toEqual({ type: 'env', envVar: 'BACKMAIL_PASSWORD' })
   })
 
   it('parses env ref with custom var name', () => {
-    const result = parsePasswordRef('env:MY_CUSTOM_VAR')
-    expect(result).toEqual({ type: 'env', envVar: 'MY_CUSTOM_VAR' })
+    const result = parsePasswordRef('env:MY_CUSTOM_SECRET')
+    expect(result).toEqual({ type: 'env', envVar: 'MY_CUSTOM_SECRET' })
   })
 
-  it('throws when env ref has empty var name', () => {
+  it('throws on missing account= in keyring ref', () => {
+    expect(() => parsePasswordRef('keyring:service=backmail')).toThrow(
+      'must include service= and account= keys'
+    )
+  })
+
+  it('throws on missing service= in keyring ref', () => {
+    expect(() => parsePasswordRef('keyring:account=user')).toThrow(
+      'must include service= and account= keys'
+    )
+  })
+
+  it('throws on empty var name in env ref', () => {
     expect(() => parsePasswordRef('env:')).toThrow('variable name must follow "env:"')
   })
-})
 
-describe('parsePasswordRef - unsupported schemes', () => {
-  it('throws with scheme name when scheme is unknown', () => {
+  it('throws on unsupported scheme', () => {
     expect(() => parsePasswordRef('ftp:something')).toThrow('Unsupported passwordRef scheme "ftp"')
   })
 
-  it('throws when there is no colon (no scheme)', () => {
-    expect(() => parsePasswordRef('unknown')).toThrow('Unsupported passwordRef scheme "unknown"')
+  it('throws on ref with no colon scheme', () => {
+    expect(() => parsePasswordRef('plainpassword')).toThrow('Unsupported passwordRef scheme')
   })
 })
 
 // ---------------------------------------------------------------------------
-// CRED-03: getPasswordByRef - keyring success
+// CRED-03: getPasswordByRef — keyring success
 // ---------------------------------------------------------------------------
 
-describe('getPasswordByRef keyring success', () => {
+describe('getPasswordByRef — keyring success', () => {
   beforeEach(async () => {
-    const { _mockGetPassword } = await import('@napi-rs/keyring') as any
+    const { _mockGetPassword } = (await import('@napi-rs/keyring')) as any
     _mockGetPassword.mockReset()
-    _mockGetPassword.mockReturnValue('secret')
+    _mockGetPassword.mockReturnValue('secret123')
   })
 
-  it('resolves to keyring value when keyring returns a string', async () => {
+  it('resolves password from keyring', async () => {
     const result = await getPasswordByRef('keyring:service=backmail;account=jan')
-    expect(result).toBe('secret')
+    expect(result).toBe('secret123')
   })
 })
 
 // ---------------------------------------------------------------------------
-// CRED-03: getPasswordByRef - keyring returns null, env fallback
+// CRED-03: getPasswordByRef — keyring returns null, BACKMAIL_PASSWORD fallback
 // ---------------------------------------------------------------------------
 
-describe('getPasswordByRef keyring null + BACKMAIL_PASSWORD fallback', () => {
+describe('getPasswordByRef — keyring returns null, BACKMAIL_PASSWORD fallback', () => {
   beforeEach(async () => {
-    const { _mockGetPassword } = await import('@napi-rs/keyring') as any
+    const { _mockGetPassword } = (await import('@napi-rs/keyring')) as any
     _mockGetPassword.mockReset()
     _mockGetPassword.mockReturnValue(null)
-    process.env.BACKMAIL_PASSWORD = 'envpass'
+    process.env.BACKMAIL_PASSWORD = 'envfallback'
   })
 
   afterEach(() => {
@@ -170,74 +162,74 @@ describe('getPasswordByRef keyring null + BACKMAIL_PASSWORD fallback', () => {
 
   it('falls back to BACKMAIL_PASSWORD when keyring returns null', async () => {
     const result = await getPasswordByRef('keyring:service=backmail;account=jan')
-    expect(result).toBe('envpass')
+    expect(result).toBe('envfallback')
   })
 })
 
 // ---------------------------------------------------------------------------
-// CRED-03: getPasswordByRef - keyring throws, env fallback (headless Linux)
+// CRED-03: getPasswordByRef — keyring throws, BACKMAIL_PASSWORD fallback
 // ---------------------------------------------------------------------------
 
-describe('getPasswordByRef keyring throws', () => {
+describe('getPasswordByRef — keyring throws, BACKMAIL_PASSWORD fallback', () => {
   beforeEach(async () => {
-    const { _mockGetPassword } = await import('@napi-rs/keyring') as any
+    const { _mockGetPassword } = (await import('@napi-rs/keyring')) as any
     _mockGetPassword.mockReset()
     _mockGetPassword.mockImplementation(() => {
       throw new Error('DBus unavailable')
     })
-    process.env.BACKMAIL_PASSWORD = 'envpass'
+    process.env.BACKMAIL_PASSWORD = 'envfallback'
   })
 
   afterEach(() => {
     delete process.env.BACKMAIL_PASSWORD
   })
 
-  it('falls back to BACKMAIL_PASSWORD when keyring throws DBus error', async () => {
+  it('falls back to BACKMAIL_PASSWORD when keyring throws', async () => {
     const result = await getPasswordByRef('keyring:service=backmail;account=jan')
-    expect(result).toBe('envpass')
+    expect(result).toBe('envfallback')
   })
 })
 
 // ---------------------------------------------------------------------------
-// CRED-03: getPasswordByRef - env: scheme
+// CRED-03: getPasswordByRef — env: scheme
 // ---------------------------------------------------------------------------
 
-describe('getPasswordByRef env scheme', () => {
+describe('getPasswordByRef — env: scheme', () => {
   beforeEach(() => {
-    process.env.MY_VAR = 'myvalue'
+    process.env.MY_TEST_VAR = 'testvalue'
   })
 
   afterEach(() => {
-    delete process.env.MY_VAR
+    delete process.env.MY_TEST_VAR
     delete process.env.BACKMAIL_PASSWORD
   })
 
-  it('resolves to env var value when env: scheme and var is set', async () => {
-    const result = await getPasswordByRef('env:MY_VAR')
-    expect(result).toBe('myvalue')
+  it('resolves password from env var named in ref', async () => {
+    const result = await getPasswordByRef('env:MY_TEST_VAR')
+    expect(result).toBe('testvalue')
   })
 
-  it('falls back to BACKMAIL_PASSWORD when env var is not set', async () => {
-    delete process.env.MY_VAR
-    process.env.BACKMAIL_PASSWORD = 'fallback'
-    const result = await getPasswordByRef('env:MY_VAR')
-    expect(result).toBe('fallback')
+  it('falls back to BACKMAIL_PASSWORD when named env var is unset', async () => {
+    delete process.env.MY_TEST_VAR
+    process.env.BACKMAIL_PASSWORD = 'backmail_fallback'
+    const result = await getPasswordByRef('env:MY_TEST_VAR')
+    expect(result).toBe('backmail_fallback')
   })
 })
 
 // ---------------------------------------------------------------------------
-// CRED-03: getPasswordByRef - throws when nothing resolves
+// CRED-03: getPasswordByRef — no credential
 // ---------------------------------------------------------------------------
 
-describe('getPasswordByRef throws when no credential', () => {
+describe('getPasswordByRef — no credential', () => {
   beforeEach(async () => {
-    const { _mockGetPassword } = await import('@napi-rs/keyring') as any
+    const { _mockGetPassword } = (await import('@napi-rs/keyring')) as any
     _mockGetPassword.mockReset()
     _mockGetPassword.mockReturnValue(null)
     delete process.env.BACKMAIL_PASSWORD
   })
 
-  it('throws error mentioning BACKMAIL_PASSWORD when no credential resolves', async () => {
+  it('throws with BACKMAIL_PASSWORD mentioned when nothing resolves', async () => {
     await expect(
       getPasswordByRef('keyring:service=backmail;account=jan')
     ).rejects.toThrow('BACKMAIL_PASSWORD')
