@@ -96,14 +96,25 @@ export async function getPasswordByRef(passwordRef: string): Promise<string> {
         resolvedPassword = result
       }
       // If result is null or undefined, resolvedPassword stays null
-    } catch {
+    } catch (err) {
       // keyring unavailable (headless Linux, no D-Bus/GNOME Keyring) — fall through
+      // Re-throw unexpected errors so programming bugs are not silently masked
+      if (
+        err instanceof Error &&
+        /keyring|dbus|gnome-keyring|secret service/i.test(err.message)
+      ) {
+        // expected: keyring not available in this environment
+      } else if (err instanceof Error && err.message.includes('No such interface')) {
+        // expected: D-Bus interface not present
+      } else {
+        throw err
+      }
     }
   } else if (parsed.type === 'env') {
     resolvedPassword = process.env[parsed.envVar!] ?? null
   }
 
-  if (resolvedPassword) return resolvedPassword
+  if (resolvedPassword !== null) return resolvedPassword
 
   // D-03: top-level BACKMAIL_PASSWORD env var fallback
   const fallback = process.env.BACKMAIL_PASSWORD
