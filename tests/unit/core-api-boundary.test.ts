@@ -67,3 +67,28 @@ describe('Phase 3: sync public API surface', () => {
     expect(fr.path).toBe('INBOX')
   })
 })
+
+describe('Phase 6: credential infrastructure public API surface', () => {
+  it('exports loadRepositoryConfig as a function', () => {
+    expect(typeof core.loadRepositoryConfig).toBe('function')
+  })
+
+  it('exports parsePasswordRef as a function', () => {
+    expect(typeof core.parsePasswordRef).toBe('function')
+  })
+
+  it('exports getPasswordByRef as a function', () => {
+    expect(typeof core.getPasswordByRef).toBe('function')
+  })
+
+  it('RepositoryConfig type is usable (compile-time check)', () => {
+    const config: core.RepositoryConfig = {
+      host: 'imap.example.com',
+      port: 993,
+      username: 'user@example.com',
+      tls: true,
+      passwordRef: 'keyring:service=backmail;account=user@example.com',
+    }
+    expect(config.passwordRef).toContain('keyring:')
+  })
+})
