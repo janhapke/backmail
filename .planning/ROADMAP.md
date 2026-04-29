@@ -152,8 +152,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 08-01-PLAN.md — Delete legacy account types and resolveAccount from browse.ts, core/index.ts, and browse.test.ts
-- [ ] 08-02-PLAN.md — Remove accounts command, --account options, --all on sync, and getConfig helper from cli/index.ts
+- [x] 08-01-PLAN.md — Delete legacy account types and resolveAccount from browse.ts, core/index.ts, and browse.test.ts
+- [x] 08-02-PLAN.md — Remove accounts command, --account options, --all on sync, and getConfig helper from cli/index.ts
 
 ### Phase 9: Init Command
 **Goal**: Users can run `backmail init` to create a fully functional backmail repository with interactive prompts, keyring credential storage, and CI-safe flag-only mode
