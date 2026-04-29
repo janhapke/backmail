@@ -124,8 +124,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 06-01-PLAN.md — Replace src/core/config.ts (RepositoryConfig schema, loadRepositoryConfig, parsePasswordRef, getPasswordByRef) + update src/core/index.ts exports
-- [ ] 06-02-PLAN.md — Replace tests/unit/config.test.ts (v1.1 credential tests) + update tests/unit/core-api-boundary.test.ts
+- [x] 06-01-PLAN.md — Replace src/core/config.ts (RepositoryConfig schema, loadRepositoryConfig, parsePasswordRef, getPasswordByRef) + update src/core/index.ts exports
+- [x] 06-02-PLAN.md — Replace tests/unit/config.test.ts (v1.1 credential tests) + update tests/unit/core-api-boundary.test.ts
 
 ### Phase 7: Repository Discovery
 **Goal**: All commands locate the backmail repository automatically by walking up from CWD, and users can override with `--workdir`
