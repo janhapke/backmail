@@ -27,7 +27,8 @@
 
 - [ ] **DISC-01**: All commands auto-detect the backmail repository by walking up from CWD looking for `.backmail/`
 - [ ] **DISC-02**: `--workdir <path>` global flag overrides auto-detection for all commands
-- [ ] **DISC-03**: Commands print a clear error when not inside a backmail repo and no `--workdir` is given
+- [x] **DISC-03
+**: Commands print a clear error when not inside a backmail repo and no `--workdir` is given
 
 ### Credentials
 
