@@ -53,13 +53,12 @@ function collectRepeatable(value: string, previous: string[]): string[] {
 }
 
 program
-  .command('sync [account]')
+  .command('sync')
   .description('Sync IMAP mailbox(es) to git')
-  .option('--all', 'sync all configured accounts')
   .option('--exclude-folder <name>', 'skip this folder (repeatable)', collectRepeatable, [])
   .option('--only-folder <name>', 'restrict to this folder (repeatable)', collectRepeatable, [])
   .option('--verbose', 'log one line per folder and per message')
-  .action(async (_account: string | undefined, opts: { all?: boolean; excludeFolder: string[]; onlyFolder: string[]; verbose?: boolean }) => {
+  .action(async (opts: { excludeFolder: string[]; onlyFolder: string[]; verbose?: boolean }) => {
     // D-02: --exclude-folder and --only-folder are mutually exclusive
     if (opts.excludeFolder.length > 0 && opts.onlyFolder.length > 0) {
       console.error('Error: --exclude-folder and --only-folder are mutually exclusive')
@@ -105,9 +104,8 @@ program
 program
   .command('log')
   .description('Show git commit history for account')
-  .option('--account <name>', 'account name (optional if single account configured)')
   .option('--limit <n>', 'number of commits to show (or "unlimited")', '20')
-  .action(async (opts: { account?: string; limit: string }) => {
+  .action(async (opts: { limit: string }) => {
     try {
       const repoRoot = getRepoRoot()
       const archivePath = path.join(repoRoot, 'archive')
@@ -126,8 +124,7 @@ program
 program
   .command('checkout <date|commit>')
   .description('Create a git worktree at a point in history')
-  .option('--account <name>', 'account name (optional if single account configured)')
-  .action(async (dateOrHash: string, opts: { account?: string }) => {
+  .action(async (dateOrHash: string) => {
     try {
       const repoRoot = getRepoRoot()
       const archivePath = path.join(repoRoot, 'archive')
@@ -143,8 +140,7 @@ program
 program
   .command('ls [folder]')
   .description('List folders or messages in a folder')
-  .option('--account <name>', 'account name (optional if single account configured)')
-  .action(async (folder: string | undefined, opts: { account?: string }) => {
+  .action(async (folder: string | undefined) => {
     try {
       const repoRoot = getRepoRoot()
       const archivePath = path.join(repoRoot, 'archive')
@@ -171,9 +167,8 @@ program
 program
   .command('view <message-id>')
   .description('View an email message')
-  .option('--account <name>', 'account name (optional if single account configured)')
   .option('--format <fmt>', 'output format: eml, plaintext, json', 'plaintext')
-  .action(async (messageId: string, opts: { account?: string; format: string }) => {
+  .action(async (messageId: string, opts: { format: string }) => {
     try {
       const repoRoot = getRepoRoot()
       const archivePath = path.join(repoRoot, 'archive')
@@ -195,13 +190,11 @@ program
   .command('restore [date|commit]')
   .description('Restore messages from backup to target IMAP server')
   .requiredOption('--to <imap-url>', 'target IMAP URL (imap:// or imaps://)')
-  .option('--account <name>', 'account name (optional if single account configured)')
   .option('--skip-duplicates <yes|no>', 'check for duplicates (default: yes)', 'yes')
   .option('--dry-run', 'output without writing to target server', false)
   .option('--verbose', 'log one line per message', false)
   .action(async (dateOrCommit: string | undefined, opts: {
     to: string
-    account?: string
     skipDuplicates: string
     dryRun?: boolean
     verbose?: boolean
