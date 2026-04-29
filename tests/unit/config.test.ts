@@ -3,12 +3,10 @@ import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs'
 
-// All tests in this file are RED until src/core/config.ts is created in Plan 02-02.
-// The import below will fail with MODULE_NOT_FOUND, causing all tests to error — expected RED state.
-import { getConfigPath, loadConfig, getPassword } from '../../src/core/config.js'
+import { loadRepositoryConfig, parsePasswordRef, getPasswordByRef } from '../../src/core/config.js'
 
 // ---------------------------------------------------------------------------
-// Mock @napi-rs/keyring Entry class — used by all getPassword tests.
+// Mock @napi-rs/keyring Entry class — used by all getPasswordByRef tests.
 // vi.mock is hoisted to the top of the file by Vitest.
 // ---------------------------------------------------------------------------
 vi.mock('@napi-rs/keyring', () => {
@@ -24,277 +22,224 @@ vi.mock('@napi-rs/keyring', () => {
 })
 
 // ---------------------------------------------------------------------------
-// CONFIG-01: OS-appropriate config path
+// CRED-01: loadRepositoryConfig
 // ---------------------------------------------------------------------------
 
-describe('getConfigDir', () => {
-  let originalPlatform: PropertyDescriptor | undefined
+describe('loadRepositoryConfig', () => {
+  let tmpDir: string
+  let tmpConfigPath: string
 
   beforeEach(() => {
-    originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backmail-test-'))
+    const backmailDir = path.join(tmpDir, '.backmail')
+    fs.mkdirSync(backmailDir)
+    tmpConfigPath = path.join(backmailDir, 'config.json')
   })
 
   afterEach(() => {
-    if (originalPlatform) {
-      Object.defineProperty(process, 'platform', originalPlatform)
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('throws error containing "No config found at" when file does not exist', () => {
+    const missingDir = path.join(os.tmpdir(), 'backmail-nonexistent-' + Date.now())
+    expect(() => loadRepositoryConfig(missingDir)).toThrow('No config found at')
+  })
+
+  it('includes the config path in the ENOENT error message', () => {
+    const missingDir = path.join(os.tmpdir(), 'backmail-nonexistent-' + Date.now())
+    const expectedPath = path.join(missingDir, '.backmail', 'config.json')
+    expect(() => loadRepositoryConfig(missingDir)).toThrow(expectedPath)
+  })
+
+  it('throws error containing "is not valid JSON" when config.json is malformed', () => {
+    fs.writeFileSync(tmpConfigPath, 'not-json{{{')
+    expect(() => loadRepositoryConfig(tmpDir)).toThrow('is not valid JSON')
+  })
+
+  it('lets ZodError propagate when config is missing required fields', () => {
+    fs.writeFileSync(tmpConfigPath, JSON.stringify({ host: 'imap.example.com' }))
+    expect(() => loadRepositoryConfig(tmpDir)).toThrow()
+  })
+
+  it('returns a typed RepositoryConfig when config is valid', () => {
+    const config = {
+      host: 'imap.example.com',
+      port: 993,
+      username: 'jan@example.com',
+      tls: true,
+      passwordRef: 'keyring:service=backmail;account=jan@example.com',
     }
-    delete process.env.XDG_CONFIG_HOME
-    delete process.env.APPDATA
-  })
+    fs.writeFileSync(tmpConfigPath, JSON.stringify(config))
 
-  it('returns linux path when process.platform is linux', () => {
-    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
-    delete process.env.XDG_CONFIG_HOME
+    const result = loadRepositoryConfig(tmpDir)
 
-    const result = getConfigPath()
-
-    expect(result).toBe(path.join(os.homedir(), '.config', 'backmail', 'config.json'))
-  })
-
-  it('returns macOS Application Support path when process.platform is darwin', () => {
-    Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })
-
-    const result = getConfigPath()
-
-    expect(result).toContain(path.join('Library', 'Application Support', 'backmail', 'config.json'))
-  })
-
-  it('returns APPDATA path when process.platform is win32', () => {
-    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
-    process.env.APPDATA = 'C:\\Users\\jan\\AppData\\Roaming'
-
-    const result = getConfigPath()
-
-    expect(result).toContain(path.join('backmail', 'config.json'))
+    expect(result.host).toBe('imap.example.com')
+    expect(result.port).toBe(993)
+    expect(result.username).toBe('jan@example.com')
+    expect(result.tls).toBe(true)
+    expect(result.passwordRef).toBe('keyring:service=backmail;account=jan@example.com')
   })
 })
 
 // ---------------------------------------------------------------------------
-// CONFIG-01: Missing config file error
+// CRED-02: parsePasswordRef
 // ---------------------------------------------------------------------------
 
-describe('missing config', () => {
-  it('throws error with config path when file does not exist', () => {
-    expect(() => loadConfig('/nonexistent/path/config.json')).toThrow(
-      'No config found at /nonexistent/path/config.json'
+describe('parsePasswordRef - keyring scheme', () => {
+  it('parses keyring ref with email account correctly', () => {
+    const result = parsePasswordRef('keyring:service=backmail;account=user@example.com')
+    expect(result).toEqual({ type: 'keyring', service: 'backmail', account: 'user@example.com' })
+  })
+
+  it('parses keyring ref with simple account name', () => {
+    const result = parsePasswordRef('keyring:service=backmail;account=jan')
+    expect(result).toEqual({ type: 'keyring', service: 'backmail', account: 'jan' })
+  })
+
+  it('throws when keyring ref is missing account=', () => {
+    expect(() => parsePasswordRef('keyring:service=backmail')).toThrow(
+      'must include service= and account= keys'
+    )
+  })
+
+  it('throws when keyring ref is missing service=', () => {
+    expect(() => parsePasswordRef('keyring:account=jan')).toThrow(
+      'must include service= and account= keys'
     )
   })
 })
 
-// ---------------------------------------------------------------------------
-// CONFIG-02: Valid config parsing
-// ---------------------------------------------------------------------------
-
-describe('valid config', () => {
-  let tmpDir: string
-  let tmpConfigPath: string
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backmail-test-'))
-    tmpConfigPath = path.join(tmpDir, 'config.json')
+describe('parsePasswordRef - env scheme', () => {
+  it('parses env ref with standard var name', () => {
+    const result = parsePasswordRef('env:BACKMAIL_PASSWORD')
+    expect(result).toEqual({ type: 'env', envVar: 'BACKMAIL_PASSWORD' })
   })
 
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true })
+  it('parses env ref with custom var name', () => {
+    const result = parsePasswordRef('env:MY_CUSTOM_VAR')
+    expect(result).toEqual({ type: 'env', envVar: 'MY_CUSTOM_VAR' })
   })
 
-  it('parses a valid multi-account config', () => {
-    const config = {
-      accounts: {
-        gmail: {
-          host: 'imap.gmail.com',
-          port: 993,
-          username: 'user@gmail.com',
-          tls: true,
-          repoPath: '/tmp/gmail',
-        },
-      },
-    }
-    fs.writeFileSync(tmpConfigPath, JSON.stringify(config))
+  it('throws when env ref has empty var name', () => {
+    expect(() => parsePasswordRef('env:')).toThrow('variable name must follow "env:"')
+  })
+})
 
-    const result = loadConfig(tmpConfigPath)
+describe('parsePasswordRef - unsupported schemes', () => {
+  it('throws with scheme name when scheme is unknown', () => {
+    expect(() => parsePasswordRef('ftp:something')).toThrow('Unsupported passwordRef scheme "ftp"')
+  })
 
-    expect(result.accounts.gmail.host).toBe('imap.gmail.com')
+  it('throws when there is no colon (no scheme)', () => {
+    expect(() => parsePasswordRef('unknown')).toThrow('Unsupported passwordRef scheme "unknown"')
   })
 })
 
 // ---------------------------------------------------------------------------
-// CONFIG-02: Schema validation
+// CRED-03: getPasswordByRef - keyring success
 // ---------------------------------------------------------------------------
 
-describe('invalid schema', () => {
-  let tmpDir: string
-  let tmpConfigPath: string
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backmail-test-'))
-    tmpConfigPath = path.join(tmpDir, 'config.json')
-  })
-
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true })
-  })
-
-  it('throws on missing host', () => {
-    const config = {
-      accounts: {
-        gmail: {
-          // host is intentionally missing
-          port: 993,
-          username: 'user@gmail.com',
-          tls: true,
-          repoPath: '/tmp/gmail',
-        },
-      },
-    }
-    fs.writeFileSync(tmpConfigPath, JSON.stringify(config))
-
-    expect(() => loadConfig(tmpConfigPath)).toThrow()
-  })
-})
-
-// ---------------------------------------------------------------------------
-// CONFIG-02: repoPath resolution
-// ---------------------------------------------------------------------------
-
-describe('repoPath', () => {
-  let tmpDir: string
-  let tmpConfigPath: string
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backmail-test-'))
-    tmpConfigPath = path.join(tmpDir, 'config.json')
-  })
-
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true })
-  })
-
-  it('resolves tilde to absolute path', () => {
-    const config = {
-      accounts: {
-        gmail: {
-          host: 'imap.gmail.com',
-          port: 993,
-          username: 'user@gmail.com',
-          tls: true,
-          repoPath: '~/mail/gmail',
-        },
-      },
-    }
-    fs.writeFileSync(tmpConfigPath, JSON.stringify(config))
-
-    const result = loadConfig(tmpConfigPath)
-
-    expect(result.accounts.gmail.repoPath).toBe(path.join(os.homedir(), 'mail', 'gmail'))
-  })
-
-  it('resolves relative path against config dir', () => {
-    const configDir = path.join(os.tmpdir(), 'backmail-test-rel')
-    fs.mkdirSync(configDir, { recursive: true })
-    const configPath = path.join(configDir, 'config.json')
-
-    const config = {
-      accounts: {
-        gmail: {
-          host: 'imap.gmail.com',
-          port: 993,
-          username: 'user@gmail.com',
-          tls: true,
-          repoPath: './gmail',
-        },
-      },
-    }
-    fs.writeFileSync(configPath, JSON.stringify(config))
-
-    const result = loadConfig(configPath)
-
-    expect(result.accounts.gmail.repoPath).toBe(path.join(configDir, 'gmail'))
-
-    fs.rmSync(configDir, { recursive: true, force: true })
-  })
-})
-
-// ---------------------------------------------------------------------------
-// CONFIG-03: Credential lookup — keyring success
-// ---------------------------------------------------------------------------
-
-describe('getPassword keyring', () => {
+describe('getPasswordByRef keyring success', () => {
   beforeEach(async () => {
     const { _mockGetPassword } = await import('@napi-rs/keyring') as any
     _mockGetPassword.mockReset()
-    _mockGetPassword.mockReturnValue('secret123')
+    _mockGetPassword.mockReturnValue('secret')
   })
 
-  afterEach(() => {
-    delete process.env.BACKMAIL_GMAIL_PASSWORD
-  })
-
-  it('returns keyring value when available', async () => {
-    const result = await getPassword('gmail')
-    expect(result).toBe('secret123')
+  it('resolves to keyring value when keyring returns a string', async () => {
+    const result = await getPasswordByRef('keyring:service=backmail;account=jan')
+    expect(result).toBe('secret')
   })
 })
 
 // ---------------------------------------------------------------------------
-// CONFIG-03: Credential lookup — env var fallback
+// CRED-03: getPasswordByRef - keyring returns null, env fallback
 // ---------------------------------------------------------------------------
 
-describe('getPassword env var', () => {
+describe('getPasswordByRef keyring null + BACKMAIL_PASSWORD fallback', () => {
   beforeEach(async () => {
     const { _mockGetPassword } = await import('@napi-rs/keyring') as any
     _mockGetPassword.mockReset()
     _mockGetPassword.mockReturnValue(null)
-    process.env.BACKMAIL_GMAIL_PASSWORD = 'envpass'
+    process.env.BACKMAIL_PASSWORD = 'envpass'
   })
 
   afterEach(() => {
-    delete process.env.BACKMAIL_GMAIL_PASSWORD
+    delete process.env.BACKMAIL_PASSWORD
   })
 
-  it('falls back to env var when keyring returns null', async () => {
-    const result = await getPassword('gmail')
+  it('falls back to BACKMAIL_PASSWORD when keyring returns null', async () => {
+    const result = await getPasswordByRef('keyring:service=backmail;account=jan')
     expect(result).toBe('envpass')
   })
 })
 
 // ---------------------------------------------------------------------------
-// CONFIG-03: Credential lookup — throws when no credential
+// CRED-03: getPasswordByRef - keyring throws, env fallback (headless Linux)
 // ---------------------------------------------------------------------------
 
-describe('getPassword throws', () => {
-  beforeEach(async () => {
-    const { _mockGetPassword } = await import('@napi-rs/keyring') as any
-    _mockGetPassword.mockReset()
-    _mockGetPassword.mockReturnValue(null)
-    delete process.env.BACKMAIL_GMAIL_PASSWORD
-  })
-
-  it('throws when neither keyring nor env var has value', async () => {
-    await expect(getPassword('gmail')).rejects.toThrow('No credential for account "gmail"')
-  })
-})
-
-// ---------------------------------------------------------------------------
-// CONFIG-03: Credential lookup — keyring throws (headless Linux)
-// ---------------------------------------------------------------------------
-
-describe('getPassword keyring error', () => {
+describe('getPasswordByRef keyring throws', () => {
   beforeEach(async () => {
     const { _mockGetPassword } = await import('@napi-rs/keyring') as any
     _mockGetPassword.mockReset()
     _mockGetPassword.mockImplementation(() => {
       throw new Error('DBus unavailable')
     })
-    process.env.BACKMAIL_GMAIL_PASSWORD = 'envpass'
+    process.env.BACKMAIL_PASSWORD = 'envpass'
   })
 
   afterEach(() => {
-    delete process.env.BACKMAIL_GMAIL_PASSWORD
+    delete process.env.BACKMAIL_PASSWORD
   })
 
-  it('falls back to env var when keyring throws', async () => {
-    const result = await getPassword('gmail')
+  it('falls back to BACKMAIL_PASSWORD when keyring throws DBus error', async () => {
+    const result = await getPasswordByRef('keyring:service=backmail;account=jan')
     expect(result).toBe('envpass')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// CRED-03: getPasswordByRef - env: scheme
+// ---------------------------------------------------------------------------
+
+describe('getPasswordByRef env scheme', () => {
+  beforeEach(() => {
+    process.env.MY_VAR = 'myvalue'
+  })
+
+  afterEach(() => {
+    delete process.env.MY_VAR
+    delete process.env.BACKMAIL_PASSWORD
+  })
+
+  it('resolves to env var value when env: scheme and var is set', async () => {
+    const result = await getPasswordByRef('env:MY_VAR')
+    expect(result).toBe('myvalue')
+  })
+
+  it('falls back to BACKMAIL_PASSWORD when env var is not set', async () => {
+    delete process.env.MY_VAR
+    process.env.BACKMAIL_PASSWORD = 'fallback'
+    const result = await getPasswordByRef('env:MY_VAR')
+    expect(result).toBe('fallback')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// CRED-03: getPasswordByRef - throws when nothing resolves
+// ---------------------------------------------------------------------------
+
+describe('getPasswordByRef throws when no credential', () => {
+  beforeEach(async () => {
+    const { _mockGetPassword } = await import('@napi-rs/keyring') as any
+    _mockGetPassword.mockReset()
+    _mockGetPassword.mockReturnValue(null)
+    delete process.env.BACKMAIL_PASSWORD
+  })
+
+  it('throws error mentioning BACKMAIL_PASSWORD when no credential resolves', async () => {
+    await expect(
+      getPasswordByRef('keyring:service=backmail;account=jan')
+    ).rejects.toThrow('BACKMAIL_PASSWORD')
   })
 })
