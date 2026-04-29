@@ -7,8 +7,6 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { simpleGit } from 'simple-git'
 import { simpleParser } from 'mailparser'
-import type { BackmailConfig } from './config.js'
-import type { AccountConfig } from './index.js'
 import { sanitizeMessageId, folderPathToFilename } from './sync.js'
 
 // ── Type Definitions ──────────────────────────────────────────────────────────
@@ -23,18 +21,32 @@ export interface MessageSummary {
   subject: string
 }
 
+// ── Legacy types (kept for Phase 8 removal) ──────────────────────────────────
+
+/** @deprecated Replaced by per-repo RepositoryConfig in v1.1 */
+export interface LegacyAccountConfig {
+  host: string
+  port: number
+  username: string
+  tls: boolean
+  repoPath: string
+}
+
+/** @deprecated Replaced by per-repo RepositoryConfig in v1.1 */
+export interface LegacyBackmailConfig {
+  accounts: Record<string, LegacyAccountConfig>
+}
+
 // ── Account Resolution (D-01, D-02) ───────────────────────────────────────────
 
 /**
- * Resolve account name to AccountConfig.
- * If accountName provided, resolve that account or throw.
- * If not provided, auto-select if exactly one account exists.
- * If multiple accounts exist and none specified, throw with available names.
+ * @deprecated Resolve account name to AccountConfig (legacy multi-account model).
+ * Kept for Phase 8 removal. CLI command actions no longer call this.
  */
 export function resolveAccount(
-  config: BackmailConfig,
+  config: LegacyBackmailConfig,
   accountName?: string
-): [string, AccountConfig] {
+): [string, LegacyAccountConfig] {
   if (accountName) {
     const acc = config.accounts[accountName]
     if (!acc) {

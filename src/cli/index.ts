@@ -6,7 +6,9 @@
 //   - process.exit() and console are acceptable here (this IS the CLI layer)
 
 import { Command } from 'commander'
-import { loadConfig } from '../core/index.js'
+import path from 'node:path'
+import { loadRepositoryConfig, findRepository } from '../core/index.js'
+import type { RepositoryConfig } from '../core/index.js'
 
 const program = new Command()
 
@@ -14,14 +16,30 @@ program
   .name('backmail')
   .description('Mirror IMAP mailboxes to git')
   .version('0.1.0')
+  .option('--workdir <path>', 'path to backmail repository (default: auto-detect from CWD)')
 
-// Helper to load config with error handling
-function getConfig() {
+// Helper to discover and validate the repository root (per D-07, D-05)
+function getRepoRoot(): string {
+  const opts = program.opts() as { workdir?: string }
+  const startDir = opts.workdir ? path.resolve(opts.workdir) : process.cwd()
+  const repoRoot = findRepository(startDir)
+  if (!repoRoot) {
+    // D-06: exact two-line error, no CWD path, exit 1
+    console.error(
+      'Error: Not inside a backmail repository.\n' +
+      'Use `backmail init` to create one, or `--workdir <path>` to specify a path.'
+    )
+    process.exit(1)
+  }
+  return repoRoot
+}
+
+// Helper to load repository config using discovered root
+function getConfig(): RepositoryConfig {
   try {
-    return loadConfig()
+    const repoRoot = getRepoRoot()
+    return loadRepositoryConfig(repoRoot)
   } catch (err) {
-    // Core threw — print to stderr and exit 1 (D-08)
-    // Do NOT log the full stack trace — only the error message
     console.error((err as Error).message)
     process.exit(1)
   }
@@ -52,64 +70,46 @@ program
   .option('--exclude-folder <name>', 'skip this folder (repeatable)', collectRepeatable, [])
   .option('--only-folder <name>', 'restrict to this folder (repeatable)', collectRepeatable, [])
   .option('--verbose', 'log one line per folder and per message')
-  .action(async (account: string | undefined, opts: { all?: boolean; excludeFolder: string[]; onlyFolder: string[]; verbose?: boolean }) => {
-    const config = getConfig()
-
+  .action(async (_account: string | undefined, opts: { all?: boolean; excludeFolder: string[]; onlyFolder: string[]; verbose?: boolean }) => {
     // D-02: --exclude-folder and --only-folder are mutually exclusive
     if (opts.excludeFolder.length > 0 && opts.onlyFolder.length > 0) {
       console.error('Error: --exclude-folder and --only-folder are mutually exclusive')
       process.exit(1)
     }
 
-    // SYNC-06: --all iterates every configured account
-    let accountNames: string[]
-    if (opts.all) {
-      accountNames = Object.keys(config.accounts)
-      if (accountNames.length === 0) {
-        console.error('No accounts configured')
+    try {
+      const repoRoot = getRepoRoot()
+      const archivePath = path.join(repoRoot, 'archive')
+      const config = loadRepositoryConfig(repoRoot)
+
+      const result = await syncAccount(config, archivePath, {
+        excludeFolders: opts.excludeFolder,
+        onlyFolders: opts.onlyFolder,
+        verbose: opts.verbose ?? false,
+      })
+
+      if (result.repoInitialized) {
+        console.log(`Initialized git repo at ${archivePath}`)
+      }
+      // D-05 summary format; D-08 partial marker
+      const partialTag = result.partial ? ' [partial]' : ''
+      console.log(`sync${partialTag}: +${result.added} added / -${result.removed} removed`)
+      // Per-folder error surfacing (verbose or error-only)
+      for (const fr of result.folderResults) {
+        if (fr.error) {
+          console.error(`folder ${fr.path} failed: ${fr.error.message}`)
+        } else if (opts.verbose) {
+          console.log(`${fr.path}: +${fr.added} / -${fr.removed}`)
+        }
+      }
+
+      if (result.folderResults.some((fr) => fr.error)) {
         process.exit(1)
       }
-    } else if (account) {
-      if (!(account in config.accounts)) {
-        console.error(`Unknown account: ${account}`)
-        process.exit(1)
-      }
-      accountNames = [account]
-    } else {
-      console.error('Specify an account name or use --all')
+    } catch (err) {
+      console.error((err as Error).message)
       process.exit(1)
     }
-
-    let anyFailed = false
-    for (const name of accountNames) {
-      try {
-        const result = await syncAccount(name, config.accounts[name], {
-          excludeFolders: opts.excludeFolder,
-          onlyFolders: opts.onlyFolder,
-          verbose: opts.verbose ?? false,
-        })
-        if (result.repoInitialized) {
-          console.log(`Initialized git repo at ${config.accounts[name].repoPath}`)
-        }
-        // D-05 summary format; D-08 partial marker
-        const partialTag = result.partial ? ' [partial]' : ''
-        console.log(`${name}${partialTag}: +${result.added} added / -${result.removed} removed`)
-        // Per-folder error surfacing (verbose or error-only)
-        for (const fr of result.folderResults) {
-          if (fr.error) {
-            console.error(`${name}: folder ${fr.path} failed: ${fr.error.message}`)
-            anyFailed = true
-          } else if (opts.verbose) {
-            console.log(`${name}: ${fr.path}: +${fr.added} / -${fr.removed}`)
-          }
-        }
-      } catch (err) {
-        console.error(`${name}: ${(err as Error).message}`)
-        anyFailed = true
-      }
-    }
-
-    if (anyFailed) process.exit(1)
   })
 
 // ── Phase 4: accounts subcommand ─────────────────────────────────────────────
@@ -118,10 +118,7 @@ program
   .description('List all configured IMAP accounts')
   .action(() => {
     const config = getConfig()
-    const names = Object.keys(config.accounts)
-    for (const name of names) {
-      console.log(name)
-    }
+    console.log(config.username)
   })
 
 // ── Phase 4: log subcommand ─────────────────────────────────────────────────
@@ -132,10 +129,10 @@ program
   .option('--limit <n>', 'number of commits to show (or "unlimited")', '20')
   .action(async (opts: { account?: string; limit: string }) => {
     try {
-      const config = getConfig()
-      const [, accountConfig] = resolveAccount(config, opts.account)
+      const repoRoot = getRepoRoot()
+      const archivePath = path.join(repoRoot, 'archive')
       const limitValue = opts.limit === 'unlimited' ? 'unlimited' : parseInt(opts.limit, 10)
-      const commits = await getLog(accountConfig.repoPath, limitValue)
+      const commits = await getLog(archivePath, limitValue)
       for (const msg of commits) {
         console.log(msg)
       }
@@ -152,9 +149,9 @@ program
   .option('--account <name>', 'account name (optional if single account configured)')
   .action(async (dateOrHash: string, opts: { account?: string }) => {
     try {
-      const config = getConfig()
-      const [, accountConfig] = resolveAccount(config, opts.account)
-      const result = await checkoutCommit(accountConfig.repoPath, dateOrHash)
+      const repoRoot = getRepoRoot()
+      const archivePath = path.join(repoRoot, 'archive')
+      const result = await checkoutCommit(archivePath, dateOrHash)
       console.log(`Checked out ${dateOrHash} (${result.sha}) → ${result.path}`)
     } catch (err) {
       console.error((err as Error).message)
@@ -169,17 +166,17 @@ program
   .option('--account <name>', 'account name (optional if single account configured)')
   .action(async (folder: string | undefined, opts: { account?: string }) => {
     try {
-      const config = getConfig()
-      const [, accountConfig] = resolveAccount(config, opts.account)
+      const repoRoot = getRepoRoot()
+      const archivePath = path.join(repoRoot, 'archive')
       if (!folder) {
         // List folders
-        const folders = await listFolders(accountConfig.repoPath)
+        const folders = await listFolders(archivePath)
         for (const f of folders) {
           console.log(f)
         }
       } else {
         // List messages in folder
-        const messages = await listMessages(accountConfig.repoPath, folder)
+        const messages = await listMessages(archivePath, folder)
         for (const msg of messages) {
           console.log(`${msg.messageId}\t${msg.date}\t${msg.from}\t${msg.subject}`)
         }
@@ -198,10 +195,10 @@ program
   .option('--format <fmt>', 'output format: eml, plaintext, json', 'plaintext')
   .action(async (messageId: string, opts: { account?: string; format: string }) => {
     try {
-      const config = getConfig()
-      const [, accountConfig] = resolveAccount(config, opts.account)
+      const repoRoot = getRepoRoot()
+      const archivePath = path.join(repoRoot, 'archive')
       const format = opts.format as 'eml' | 'plaintext' | 'json'
-      const result = await viewMessage(accountConfig.repoPath, messageId, format)
+      const result = await viewMessage(archivePath, messageId, format)
       if (format === 'json') {
         console.log(JSON.stringify(result, null, 2))
       } else {
@@ -230,8 +227,9 @@ program
     verbose?: boolean
   }) => {
     try {
-      const config = getConfig()
-      const [, accountConfig] = resolveAccount(config, opts.account)
+      const repoRoot = getRepoRoot()
+      const archivePath = path.join(repoRoot, 'archive')
+      const config = loadRepositoryConfig(repoRoot)
 
       // Convert --skip-duplicates string to boolean (D-11)
       const skipDuplicates = opts.skipDuplicates === 'yes'
@@ -240,7 +238,8 @@ program
 
       // Call core restoreAccount function
       const result = await restoreAccount(
-        accountConfig,
+        config,
+        archivePath,
         opts.to,
         dateOrCommit,
         {

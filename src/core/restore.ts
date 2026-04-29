@@ -5,7 +5,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { ImapFlow } from 'imapflow'
-import type { AccountConfig } from './index.js'
+import type { RepositoryConfig } from './config.js'
 import { sanitizeMessageId, folderPathToFilename } from './sync.js'
 import { checkoutCommit } from './browse.js'
 
@@ -146,15 +146,16 @@ export async function createFolderIfNeeded(
  * D-01 through D-19: All implementation decisions from 05-CONTEXT.md
  */
 export async function restoreAccount(
-  config: AccountConfig,
+  config: RepositoryConfig,
+  archivePath: string,
   targetUrl: string,
   dateOrCommit: string | undefined,
   options: RestoreOptions
 ): Promise<RestoreResult> {
   // D-02, D-03: Resolve source path (from main repo or worktree)
-  let sourcePath = config.repoPath
+  let sourcePath = archivePath
   if (dateOrCommit) {
-    const checkout = await checkoutCommit(config.repoPath, dateOrCommit)
+    const checkout = await checkoutCommit(archivePath, dateOrCommit)
     sourcePath = checkout.path
   }
 

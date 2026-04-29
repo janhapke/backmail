@@ -7,8 +7,8 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { ImapFlow } from 'imapflow'
 import { simpleGit } from 'simple-git'
-import type { AccountConfig } from './index.js'
-import { getPassword } from './config.js'
+import type { RepositoryConfig } from './config.js'
+import { getPasswordByRef } from './config.js'
 
 // ── Public Interfaces ────────────────────────────────────────────────────────
 
@@ -164,8 +164,8 @@ export async function ensureRepo(repoPath: string): Promise<boolean> {
  * Main sync function: fetch messages from IMAP, update local git repo
  */
 export async function syncAccount(
-  accountName: string,
-  config: AccountConfig,
+  config: RepositoryConfig,
+  repoPath: string,
   opts: SyncOptions,
 ): Promise<SyncResult> {
   // Mutual exclusion check
@@ -173,15 +173,15 @@ export async function syncAccount(
     throw new Error('--only-folder and --exclude-folder are mutually exclusive')
   }
 
-  // Get password for account
-  const password = await getPassword(accountName)
+  // Get password via passwordRef (CRED-01)
+  const password = await getPasswordByRef(config.passwordRef)
 
   // Ensure repository exists
-  const repoInitialized = await ensureRepo(config.repoPath)
+  const repoInitialized = await ensureRepo(repoPath)
 
   // Create directories
-  await fs.mkdir(path.join(config.repoPath, 'messages'), { recursive: true })
-  await fs.mkdir(path.join(config.repoPath, 'folders'), { recursive: true })
+  await fs.mkdir(path.join(repoPath, 'messages'), { recursive: true })
+  await fs.mkdir(path.join(repoPath, 'folders'), { recursive: true })
 
   // Create IMAP client
   const client = new ImapFlow({
@@ -207,7 +207,7 @@ export async function syncAccount(
     // Sync each folder
     for (const folder of folders) {
       try {
-        const folderResult = await syncFolder(client, folder, config.repoPath, opts.verbose)
+        const folderResult = await syncFolder(client, folder, repoPath, opts.verbose)
         added += folderResult.added
         removed += folderResult.removed
         folderResults.push(folderResult)
@@ -233,7 +233,7 @@ export async function syncAccount(
   }
 
   // Commit changes to git
-  const git = simpleGit(config.repoPath)
+  const git = simpleGit(repoPath)
   const status = await git.status()
   if (!status.isClean()) {
     try {
