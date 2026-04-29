@@ -42,8 +42,8 @@ The git repo IS the backup — point-in-time restore, local search, and provider
 - [ ] `init` stores the password in the OS keyring and writes a `passwordRef` into config.json
 - [x] `passwordRef` format: `"keyring:service=backmail;account=<username>"` (extensible — parser also handles `env:VAR`) *(validated Phase 6)*
 - [x] `BACKMAIL_PASSWORD` env var accepted as password fallback (no keyring required) *(validated Phase 6)*
-- [ ] Commands auto-detect the backmail repository by walking up from CWD looking for `.backmail/`
-- [ ] `--workdir <path>` global flag overrides auto-detection for all commands
+- [x] Commands auto-detect the backmail repository by walking up from CWD looking for `.backmail/` *(validated Phase 7)*
+- [x] `--workdir <path>` global flag overrides auto-detection for all commands *(validated Phase 7)*
 - [ ] All existing commands (sync, log, ls, view, checkout, restore) work correctly with the new repository structure
 - [ ] Core sync logic remains a clean TypeScript module (eimerjs IPC boundary for future Electron integration)
 
