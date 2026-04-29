@@ -40,8 +40,8 @@ The git repo IS the backup — point-in-time restore, local search, and provider
 - [ ] `backmail init` creates a backmail repository (`.backmail/config.json`, `.backmail/log`, `archive/` git repo, `worktrees/`)
 - [ ] `init` prompts interactively for any parameters not supplied as CLI flags; accepts all params as flags for full automation
 - [ ] `init` stores the password in the OS keyring and writes a `passwordRef` into config.json
-- [ ] `passwordRef` format: `"keyring:service=backmail;account=<username>"` (extensible — parser also handles `env:VAR`)
-- [ ] `BACKMAIL_PASSWORD` env var accepted as password fallback (no keyring required)
+- [x] `passwordRef` format: `"keyring:service=backmail;account=<username>"` (extensible — parser also handles `env:VAR`) *(validated Phase 6)*
+- [x] `BACKMAIL_PASSWORD` env var accepted as password fallback (no keyring required) *(validated Phase 6)*
 - [ ] Commands auto-detect the backmail repository by walking up from CWD looking for `.backmail/`
 - [ ] `--workdir <path>` global flag overrides auto-detection for all commands
 - [ ] All existing commands (sync, log, ls, view, checkout, restore) work correctly with the new repository structure
@@ -106,4 +106,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-28 — Milestone v1.1 started (repository-centric UX)*
+*Last updated: 2026-04-29 — Phase 6 complete (credential infrastructure: RepositoryConfig, passwordRef parser, keyring/env fallback)*
