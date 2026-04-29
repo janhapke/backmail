@@ -103,7 +103,7 @@ program
 // ── Phase 4: log subcommand ─────────────────────────────────────────────────
 program
   .command('log')
-  .description('Show git commit history for account')
+  .description('Show git commit history')
   .option('--limit <n>', 'number of commits to show (or "unlimited")', '20')
   .action(async (opts: { limit: string }) => {
     try {

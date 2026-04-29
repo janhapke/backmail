@@ -2,9 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
-import type { BackmailConfig, AccountConfig, MessageSummary } from '../../src/core/index.js'
+import type { MessageSummary } from '../../src/core/index.js'
 import {
-  resolveAccount,
   getLog,
   checkoutCommit,
   listFolders,
@@ -12,69 +11,6 @@ import {
   viewMessage,
 } from '../../src/core/browse.js'
 import { sanitizeMessageId } from '../../src/core/sync.js'
-
-// ── resolveAccount Tests ──────────────────────────────────────────────────────
-
-describe('resolveAccount', () => {
-  const mockConfig: BackmailConfig = {
-    accounts: {
-      gmail: {
-        host: 'imap.gmail.com',
-        port: 993,
-        username: 'user@gmail.com',
-        tls: true,
-        repoPath: '/tmp/gmail',
-      },
-      work: {
-        host: 'mail.example.com',
-        port: 993,
-        username: 'user@example.com',
-        tls: true,
-        repoPath: '/tmp/work',
-      },
-    },
-  }
-
-  const singleAccountConfig: BackmailConfig = {
-    accounts: {
-      gmail: {
-        host: 'imap.gmail.com',
-        port: 993,
-        username: 'user@gmail.com',
-        tls: true,
-        repoPath: '/tmp/gmail',
-      },
-    },
-  }
-
-  it('resolves explicitly named account', () => {
-    const [name, config] = resolveAccount(mockConfig, 'gmail')
-    expect(name).toBe('gmail')
-    expect(config.host).toBe('imap.gmail.com')
-  })
-
-  it('auto-selects single account', () => {
-    const [name, config] = resolveAccount(singleAccountConfig)
-    expect(name).toBe('gmail')
-    expect(config.host).toBe('imap.gmail.com')
-  })
-
-  it('throws when multiple accounts and no --account flag', () => {
-    expect(() => resolveAccount(mockConfig)).toThrow(
-      /Multiple accounts configured/
-    )
-  })
-
-  it('throws for unknown account name', () => {
-    expect(() => resolveAccount(mockConfig, 'unknown')).toThrow(
-      /Unknown account: unknown/
-    )
-  })
-
-  it('lists available accounts in error message', () => {
-    expect(() => resolveAccount(mockConfig)).toThrow(/gmail|work/)
-  })
-})
 
 // ── getLog Tests ──────────────────────────────────────────────────────────────
 

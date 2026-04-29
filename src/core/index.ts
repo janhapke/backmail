@@ -30,7 +30,6 @@ export { syncAccount } from './sync.js'
 // Phase 4: Browse module public API
 export type { MessageSummary } from './browse.js'
 export {
-  resolveAccount,
   getLog,
   checkoutCommit,
   listFolders,
