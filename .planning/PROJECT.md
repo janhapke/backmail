@@ -44,7 +44,8 @@ The git repo IS the backup — point-in-time restore, local search, and provider
 - [x] `BACKMAIL_PASSWORD` env var accepted as password fallback (no keyring required) *(validated Phase 6)*
 - [x] Commands auto-detect the backmail repository by walking up from CWD looking for `.backmail/` *(validated Phase 7)*
 - [x] `--workdir <path>` global flag overrides auto-detection for all commands *(validated Phase 7)*
-- [ ] All existing commands (sync, log, ls, view, checkout, restore) work correctly with the new repository structure
+- [x] All existing commands (sync, log, ls, view, checkout, restore) work correctly with the new repository structure *(validated Phase 8)*
+- [x] `--account` flag and central account registry removed from all commands *(validated Phase 8)*
 - [ ] Core sync logic remains a clean TypeScript module (eimerjs IPC boundary for future Electron integration)
 
 ### Out of Scope
@@ -106,4 +107,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-29 — Phase 6 complete (credential infrastructure: RepositoryConfig, passwordRef parser, keyring/env fallback)*
+*Last updated: 2026-04-29 — Phase 8 complete (command migration: account registry removed, all commands use archive/ path derivation)*
