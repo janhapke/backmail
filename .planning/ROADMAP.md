@@ -25,7 +25,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 ### v1.1 — Repository-Centric UX
 
 - [ ] **Phase 6: Credential Infrastructure** - New config types, passwordRef format parsing, and keyring/env-var credential resolution
-- [ ] **Phase 7: Repository Discovery** - Walk-up `.backmail/` detection and `--workdir` global flag for all commands
+- [x] **Phase 7: Repository Discovery** - Walk-up `.backmail/` detection and `--workdir` global flag for all commands (completed 2026-04-29)
 - [ ] **Phase 8: Command Migration** - All existing commands derive paths from `archive/` and the `--account` registry is removed
 - [ ] **Phase 9: Init Command** - Interactive `backmail init` with prompts, keyring write, and CI/non-TTY safety
 
@@ -138,8 +138,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 07-01-PLAN.md — Core discovery module (src/core/discovery.ts: findRepository), re-export in src/core/index.ts, unit tests
-- [ ] 07-02-PLAN.md — CLI migration (src/cli/index.ts: --workdir global flag, getRepoRoot helper, all commands use archivePath)
+- [x] 07-01-PLAN.md — Core discovery module (src/core/discovery.ts: findRepository), re-export in src/core/index.ts, unit tests
+- [x] 07-02-PLAN.md — CLI migration (src/cli/index.ts: --workdir global flag, getRepoRoot helper, all commands use archivePath)
 
 ### Phase 8: Command Migration
 **Goal**: All existing commands (sync, log, ls, view, checkout, restore) work correctly against the new repository structure, deriving the git repo path from `archive/` and requiring no account registry
@@ -176,6 +176,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 4. Browse | 3/3 | Complete | - |
 | 5. Restore | 3/3 | Complete | - |
 | 6. Credential Infrastructure | 0/2 | Not started | - |
-| 7. Repository Discovery | 0/2 | Not started | - |
+| 7. Repository Discovery | 2/2 | Complete    | 2026-04-29 |
 | 8. Command Migration | 0/? | Not started | - |
 | 9. Init Command | 0/? | Not started | - |
