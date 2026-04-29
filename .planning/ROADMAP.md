@@ -121,7 +121,11 @@ Plans:
   1. A `passwordRef` value of `keyring:service=backmail;account=jan@example.com` resolves to the correct password from the OS keyring
   2. When the keyring is unavailable (headless/CI), `BACKMAIL_PASSWORD` env var is used instead and no error is thrown
   3. An unrecognised `passwordRef` scheme produces a clear error message naming the unsupported scheme
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 06-01-PLAN.md — Replace src/core/config.ts (RepositoryConfig schema, loadRepositoryConfig, parsePasswordRef, getPasswordByRef) + update src/core/index.ts exports
+- [ ] 06-02-PLAN.md — Replace tests/unit/config.test.ts (v1.1 credential tests) + update tests/unit/core-api-boundary.test.ts
 
 ### Phase 7: Repository Discovery
 **Goal**: All commands locate the backmail repository automatically by walking up from CWD, and users can override with `--workdir`
@@ -167,7 +171,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 3. Sync | 3/3 | Complete | 2006-04-22 |
 | 4. Browse | 3/3 | Complete | - |
 | 5. Restore | 3/3 | Complete | - |
-| 6. Credential Infrastructure | 0/? | Not started | - |
+| 6. Credential Infrastructure | 0/2 | Not started | - |
 | 7. Repository Discovery | 0/? | Not started | - |
 | 8. Command Migration | 0/? | Not started | - |
 | 9. Init Command | 0/? | Not started | - |
