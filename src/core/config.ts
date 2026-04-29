@@ -1,73 +1,43 @@
-// src/core/config.ts — CONFIG-01, CONFIG-02, CONFIG-03
+// src/core/config.ts — CRED-01, CRED-02, CRED-03
 // ARCH-01: no exit calls, no console.*, no CLI imports
 import * as z from 'zod'
-import os from 'node:os'
-import path from 'node:path'
 import fs from 'node:fs'
+import path from 'node:path'
 import { Entry } from '@napi-rs/keyring'
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
-const AccountConfigSchema = z.object({
+const RepositoryConfigSchema = z.object({
   host: z.string().min(1),
   port: z.number().int().min(1).max(65535),
   username: z.string().min(1),
   tls: z.boolean(),
-  repoPath: z.string().min(1),
+  passwordRef: z.string().min(1),
 })
 
-const ConfigSchema = z.object({
-  accounts: z.record(
-    z.string().min(1).regex(/^[a-z0-9_-]+$/i, 'Account name must be alphanumeric'),
-    AccountConfigSchema
-  ),
-})
+export type RepositoryConfig = z.infer<typeof RepositoryConfigSchema>
 
-export type BackmailConfig = z.infer<typeof ConfigSchema>
+// ── PasswordRef ───────────────────────────────────────────────────────────────
 
-// ── Path resolution ───────────────────────────────────────────────────────────
-
-function getConfigDir(): string {
-  switch (process.platform) {
-    case 'win32':
-      return path.join(process.env.APPDATA ?? os.homedir(), 'backmail')
-    case 'darwin':
-      return path.join(os.homedir(), 'Library', 'Application Support', 'backmail')
-    default: // linux + other unix — XDG_CONFIG_HOME aware
-      return path.join(
-        process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), '.config'),
-        'backmail'
-      )
-  }
+export interface PasswordRef {
+  type: 'keyring' | 'env'
+  service?: string
+  account?: string
+  envVar?: string
 }
 
-export function getConfigPath(): string {
-  return path.join(getConfigDir(), 'config.json')
-}
+// ── Repository config loading ─────────────────────────────────────────────────
 
-// ── repoPath normalization (D-03) ─────────────────────────────────────────────
-
-function resolveRepoPath(repoPath: string, configDir: string): string {
-  const expanded = repoPath.startsWith('~/')
-    ? path.join(os.homedir(), repoPath.slice(2))
-    : repoPath
-  // CRITICAL: resolve against configDir, not CWD (pitfall 5 in RESEARCH.md)
-  return path.resolve(configDir, expanded)
-}
-
-// ── Config loading ────────────────────────────────────────────────────────────
-
-export function loadConfig(configPath?: string): BackmailConfig {
-  const resolvedPath = configPath ?? getConfigPath()
-  const configDir = path.dirname(resolvedPath)
+export function loadRepositoryConfig(repoRoot: string): RepositoryConfig {
+  const configPath = path.join(repoRoot, '.backmail', 'config.json')
 
   let raw: string
   try {
-    raw = fs.readFileSync(resolvedPath, 'utf-8')
+    raw = fs.readFileSync(configPath, 'utf-8')
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
       throw new Error(
-        `No config found at ${resolvedPath}. Create it with your IMAP accounts — see README for format.`
+        `No config found at ${configPath}. Run \`backmail init\` to create a repository.`
       )
     }
     throw err
@@ -77,48 +47,70 @@ export function loadConfig(configPath?: string): BackmailConfig {
   try {
     parsed = JSON.parse(raw)
   } catch {
-    throw new Error(`Config file at ${resolvedPath} is not valid JSON.`)
+    throw new Error(`Config file at ${configPath} is not valid JSON.`)
   }
 
-  const config = ConfigSchema.parse(parsed) as BackmailConfig
-
-  // Resolve all repoPaths (D-03)
-  for (const account of Object.values(config.accounts)) {
-    account.repoPath = resolveRepoPath(account.repoPath, configDir)
-  }
-
-  return config
+  return RepositoryConfigSchema.parse(parsed) as RepositoryConfig
 }
 
-// ── Credential lookup (D-07, D-09) ───────────────────────────────────────────
+// ── passwordRef parser (D-04, D-05) ──────────────────────────────────────────
 
-export async function getPassword(accountName: string): Promise<string> {
-  let resolvedPassword: string | null = null
-  try {
-    // Use Entry class (synchronous) — mocked in tests via vi.mock('@napi-rs/keyring')
-    const entry = new Entry('backmail', accountName)
-    const result = entry.getPassword()
-
-    // Check if result is a Promise
-    if (result && typeof (result as any).then === 'function') {
-      resolvedPassword = await (result as unknown as Promise<string>)
-    } else if (typeof result === 'string') {
-      resolvedPassword = result
+export function parsePasswordRef(ref: string): PasswordRef {
+  if (ref.startsWith('keyring:')) {
+    const params = new URLSearchParams(ref.slice(8).replace(/;/g, '&'))
+    const service = params.get('service')
+    const account = params.get('account')
+    if (!service || !account) {
+      throw new Error(
+        `Malformed keyring passwordRef "${ref}": must include service= and account= keys.`
+      )
     }
-    // If result is null or undefined, resolvedPassword stays null
-  } catch {
-    // keyring unavailable (headless Linux, no D-Bus/GNOME Keyring) — fall through
+    return { type: 'keyring', service, account }
+  } else if (ref.startsWith('env:')) {
+    const envVar = ref.slice(4)
+    if (!envVar) {
+      throw new Error(`Malformed env passwordRef "${ref}": variable name must follow "env:".`)
+    }
+    return { type: 'env', envVar }
+  }
+  const scheme = ref.split(':')[0]
+  throw new Error(
+    `Unsupported passwordRef scheme "${scheme}" in "${ref}". Use "keyring:" or "env:".`
+  )
+}
+
+// ── Credential resolver (D-03) ────────────────────────────────────────────────
+
+export async function getPasswordByRef(passwordRef: string): Promise<string> {
+  const parsed = parsePasswordRef(passwordRef)
+  let resolvedPassword: string | null = null
+
+  if (parsed.type === 'keyring') {
+    try {
+      const entry = new Entry(parsed.service!, parsed.account!)
+      const result = entry.getPassword()
+      // Check if result is a Promise
+      if (result && typeof (result as any).then === 'function') {
+        resolvedPassword = await (result as unknown as Promise<string>)
+      } else if (typeof result === 'string') {
+        resolvedPassword = result
+      }
+      // If result is null or undefined, resolvedPassword stays null
+    } catch {
+      // keyring unavailable (headless Linux, no D-Bus/GNOME Keyring) — fall through
+    }
+  } else if (parsed.type === 'env') {
+    resolvedPassword = process.env[parsed.envVar!] ?? null
   }
 
   if (resolvedPassword) return resolvedPassword
 
-  // Env var fallback (D-06): BACKMAIL_<ACCOUNT_UPPERCASED>_PASSWORD
-  const envKey = `BACKMAIL_${accountName.toUpperCase()}_PASSWORD`
-  const envPassword = process.env[envKey]
-  if (envPassword !== undefined) return envPassword
+  // D-03: top-level BACKMAIL_PASSWORD env var fallback
+  const fallback = process.env.BACKMAIL_PASSWORD
+  if (fallback) return fallback
 
-  // No credential found — throw lazily (D-09)
   throw new Error(
-    `No credential for account "${accountName}" — set ${envKey} or add to OS keyring.`
+    `No credential resolved for passwordRef "${passwordRef}". ` +
+      `Set the BACKMAIL_PASSWORD environment variable or configure a valid passwordRef.`
   )
 }
