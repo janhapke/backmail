@@ -140,3 +140,5 @@ vite.config.ts.timestamp-*
 
 # Claude Code local settings (machine-specific permissions and paths)
 .claude/settings.local.json
+
+notes.md
