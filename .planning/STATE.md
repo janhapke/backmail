@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Core CLI
 status: completed
-last_updated: "2026-04-30T14:25:08.715Z"
+last_updated: "2026-04-30T20:54:48.912Z"
 last_activity: 2026-04-29
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 6
+  total_plans: 9
   completed_plans: 6
-  percent: 100
+  percent: 67
 ---
 
 # Project State
@@ -67,4 +67,4 @@ Carried from v1.0:
 |----------|------|--------|-------------|
 | Bug | CR-01: Unsafe BigInt() from corrupted folder JSON state | Deferred | Phase 3 (v1.0) |
 
-**Planned Phase:** 08 (Command Migration) — 2 plans — 2026-04-29T21:29:46.673Z
+**Planned Phase:** 9 (Init Command) — 3 plans — 2026-04-30T20:54:48.908Z
