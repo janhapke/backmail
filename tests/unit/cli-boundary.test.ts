@@ -116,3 +116,25 @@ describe('ARCH-01: src/core/sync.ts module boundary enforcement', () => {
     expect(syncSource).toMatch(/logger:\s*false/)
   })
 })
+
+describe('ARCH-01: src/core/init.ts module boundary enforcement', () => {
+  it('src/core/init.ts does not import from src/cli/', () => {
+    const initSource = readFileSync(
+      resolve(__dirname, '../../src/core/init.ts'),
+      'utf-8'
+    )
+    expect(initSource).not.toMatch(/from ['"]\.\.\/cli\//)
+    expect(initSource).not.toMatch(/from ['"].*\/cli\//)
+    expect(initSource).not.toMatch(/require\(.*cli/)
+  })
+
+  it('src/core/init.ts does not call process.exit()', () => {
+    const initSource = readFileSync(resolve(__dirname, '../../src/core/init.ts'), 'utf-8')
+    expect(initSource).not.toMatch(/process\.exit/)
+  })
+
+  it('src/core/init.ts does not call console methods', () => {
+    const initSource = readFileSync(resolve(__dirname, '../../src/core/init.ts'), 'utf-8')
+    expect(initSource).not.toMatch(/console\.(log|error|warn|info|debug)/)
+  })
+})
