@@ -1,0 +1,20 @@
+From: frank@example.com
+To: testuser@localhost
+Subject: Draft blog post for review
+Date: Mon, 07 Apr 2025 13:55:00 +0000
+Message-ID: <inbox-010@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Hey,
+
+Can you give this a quick read before I publish? It's about our migration
+from a monolith to services — want to make sure the timeline is accurate
+and I haven't said anything embarrassing.
+
+https://docs.example.com/drafts/monolith-to-services-migration
+
+No rush, but ideally before end of week.
+
+Thanks,
+Frank

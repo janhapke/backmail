@@ -1,11 +1,44 @@
 # docker-compose.yml
 # Test infrastructure only — not used in production.
-# Image: gmitirol/minimal-imap:v1 (Alpine + Dovecot, 30.7 MB, port 143)
-# Credentials: testuser / testpass (set via IMAP_USERS env var)
+# Image: gmitirol/minimal-imap:v1 (Alpine + Dovecot, 30.7 MB)
+#
+# Usage:
+#   docker compose up            — start both servers and seed source
+#   docker compose up imap-source imap-target  — servers only, no seeding
+#   npm run imap:clear           — wipe all messages from imap-target (reset between runs)
+#
+# imap-source  localhost:143  testuser / testpass  (pre-seeded with test emails)
+# imap-target  localhost:144  testuser / testpass  (empty, use as restore destination)
 services:
-  imap:
+  imap-source:
     image: gmitirol/minimal-imap:v1
     ports:
       - "143:143"
     environment:
       IMAP_USERS: "testuser:testpass"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 143 || exit 1"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 3s
+
+  imap-target:
+    image: gmitirol/minimal-imap:v1
+    ports:
+      - "144:143"
+    environment:
+      IMAP_USERS: "testuser:testpass"
+
+  mail-seeder:
+    build:
+      context: .docker/imap-seeder
+    environment:
+      IMAP_HOST: imap-source
+      IMAP_PORT: "143"
+      IMAP_USER: testuser
+      IMAP_PASS: testpass
+    depends_on:
+      imap-source:
+        condition: service_healthy
+    restart: "no"

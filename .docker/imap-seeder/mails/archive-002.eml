@@ -1,0 +1,22 @@
+From: noreply@flights.example.com
+To: testuser@localhost
+Subject: Your booking confirmation — BER → LHR, 2024-12-19
+Date: Wed, 04 Dec 2024 14:22:00 +0000
+Message-ID: <archive-002@example.com>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<!DOCTYPE html>
+<html>
+<body style="font-family: sans-serif;">
+<h2>Booking Confirmed</h2>
+<table>
+  <tr><td><strong>Flight</strong></td><td>EX 4021</td></tr>
+  <tr><td><strong>From</strong></td><td>Berlin Brandenburg (BER)</td></tr>
+  <tr><td><strong>To</strong></td><td>London Heathrow (LHR)</td></tr>
+  <tr><td><strong>Date</strong></td><td>Thu 19 Dec 2024, 07:45</td></tr>
+  <tr><td><strong>Booking ref</strong></td><td>EX4A7B9C</td></tr>
+</table>
+<p>Check in opens 24 hours before departure.</p>
+</body>
+</html>

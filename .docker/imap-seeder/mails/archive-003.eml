@@ -1,0 +1,20 @@
+From: grace@example.com
+To: testuser@localhost
+Subject: Project Phoenix — final handover notes
+Date: Fri, 20 Dec 2024 17:30:00 +0000
+Message-ID: <archive-003@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Hi,
+
+With Project Phoenix wrapping up today, here are the final handover notes:
+
+- Production deploy completed at 16:00 UTC, all checks green
+- Runbook is in Confluence under "Phoenix > Operations"
+- On-call rotation updated — first responder is now the platform team
+- Known issues: #1142 (minor UI glitch, low priority) — backlogged
+
+It's been a great project. Thanks for all the hard work!
+
+Grace

@@ -1,0 +1,13 @@
+From: testuser@localhost
+To: alice@example.com
+Subject: Re: Welcome to the team!
+Date: Mon, 06 Jan 2025 10:02:00 +0000
+Message-ID: <sent-001@example.com>
+In-Reply-To: <inbox-001@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Thanks Alice! Really excited to be here. I'll go through the onboarding
+docs today.
+
+Talk soon!

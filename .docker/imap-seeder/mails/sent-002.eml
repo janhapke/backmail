@@ -1,0 +1,17 @@
+From: testuser@localhost
+To: bob@example.com
+Subject: Re: Q4 roadmap review
+Date: Tue, 14 Jan 2025 16:00:00 +0000
+Message-ID: <sent-002@example.com>
+In-Reply-To: <inbox-002@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Bob,
+
+Good points. Thursday 15:00 works for me. I'll send a calendar invite.
+
+On the API migration timeline — agreed it's tight. I'll add a risk note
+and we can discuss options during the sync.
+
+Talk then.

@@ -1,0 +1,20 @@
+From: testuser@localhost
+To: support@cloudprovider.example.com
+Subject: Billing question — unexpected charge on Feb statement
+Date: Mon, 03 Feb 2025 09:20:00 +0000
+Message-ID: <sent-003@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Hi,
+
+I noticed a charge of USD 847.32 on my February statement under the line item
+"Egress — cross-region" that I wasn't expecting. Our architecture doesn't
+intentionally route traffic cross-region.
+
+Account ID: acct-7f3a9b2c
+Invoice: INV-2025-02-00881
+
+Could you help clarify what generated this charge?
+
+Thanks

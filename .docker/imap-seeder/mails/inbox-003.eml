@@ -1,0 +1,22 @@
+From: noreply@github.com
+To: testuser@localhost
+Subject: [backmail/backmail] Pull request opened: Add restore command (#42)
+Date: Wed, 22 Jan 2025 11:05:00 +0000
+Message-ID: <inbox-003@example.com>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<!DOCTYPE html>
+<html>
+<body>
+<p><strong>bob</strong> opened pull request <a href="#">#42 Add restore command</a> in <strong>backmail/backmail</strong>.</p>
+<hr>
+<h3>Changes</h3>
+<ul>
+  <li>Implement <code>backmail restore</code> CLI command</li>
+  <li>Add IMAP APPEND support</li>
+  <li>Integration tests for restore flow</li>
+</ul>
+<p><a href="#">View pull request</a></p>
+</body>
+</html>

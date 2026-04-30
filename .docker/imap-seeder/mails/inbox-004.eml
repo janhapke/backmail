@@ -1,0 +1,21 @@
+From: carol@example.com
+To: testuser@localhost
+Subject: Invoice #2025-0042 attached
+Date: Fri, 31 Jan 2025 08:44:00 +0000
+Message-ID: <inbox-004@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Hi,
+
+Please find attached invoice #2025-0042 for services rendered in January 2025.
+
+Amount due: EUR 3,200.00
+Due date: 2025-02-28
+Payment reference: INV-2025-0042
+
+Let me know if you have any questions.
+
+Best regards,
+Carol
+Finance Department

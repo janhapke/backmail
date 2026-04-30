@@ -1,0 +1,18 @@
+From: security@example.com
+To: testuser@localhost
+Subject: Your password was changed
+Date: Fri, 28 Mar 2025 19:41:00 +0000
+Message-ID: <inbox-009@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Hi,
+
+Your account password was changed on 2025-03-28 at 19:39 UTC from IP 203.0.113.42.
+
+If this was you, no action is needed.
+
+If you did NOT make this change, please contact support immediately at
+security@example.com or call +1-800-555-0100.
+
+-- Security Team

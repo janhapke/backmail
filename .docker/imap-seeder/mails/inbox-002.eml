@@ -1,0 +1,18 @@
+From: bob@example.com
+To: testuser@localhost
+Subject: Re: Q4 roadmap review
+Date: Tue, 14 Jan 2025 14:32:00 +0000
+Message-ID: <inbox-002@example.com>
+In-Reply-To: <roadmap-q4@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Thanks for sharing the draft. A few comments:
+
+1. The timeline for the API migration looks tight — do we have buffer?
+2. The mobile section needs more detail on the offline-sync story.
+3. Who owns the data retention work?
+
+Can we sync Thursday afternoon?
+
+Bob

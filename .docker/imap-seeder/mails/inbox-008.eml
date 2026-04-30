@@ -1,0 +1,16 @@
+From: eva@example.com
+To: testuser@localhost, bob@example.com, carol@example.com
+Subject: All-hands meeting rescheduled to March 20
+Date: Wed, 12 Mar 2025 10:05:00 +0000
+Message-ID: <inbox-008@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Hi all,
+
+Due to a scheduling conflict the all-hands has been moved from March 18 to
+Thursday March 20, same time (14:00–15:30 CET). The agenda is unchanged.
+
+Updated calendar invite will follow shortly.
+
+Eva

@@ -1,0 +1,24 @@
+From: newsletter@techdigest.example.com
+To: testuser@localhost
+Subject: TechDigest Weekly: AI tools, Rust 2025, and the death of REST?
+Date: Mon, 03 Mar 2025 07:00:00 +0000
+Message-ID: <inbox-007@example.com>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<!DOCTYPE html>
+<html>
+<body style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+<h1 style="color: #333;">TechDigest Weekly</h1>
+<p style="color: #666;">Issue #183 &mdash; 3 March 2025</p>
+<hr>
+<h2>This week</h2>
+<ul>
+  <li><strong>AI coding assistants hit 40% adoption</strong> — new survey data from Stack Overflow</li>
+  <li><strong>Rust 2025 edition preview</strong> — what's changing and what's staying</li>
+  <li><strong>GraphQL vs REST in 2025</strong> — the debate continues</li>
+  <li><strong>Deno 3.0 released</strong> — full Node.js compat, new runtime APIs</li>
+</ul>
+<p style="font-size: 12px; color: #aaa;">Unsubscribe | Manage preferences</p>
+</body>
+</html>

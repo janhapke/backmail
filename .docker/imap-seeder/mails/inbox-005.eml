@@ -1,0 +1,19 @@
+From: alerts@monitoring.example.com
+To: testuser@localhost
+Subject: [RESOLVED] High memory usage on prod-api-02
+Date: Mon, 10 Feb 2025 03:17:00 +0000
+Message-ID: <inbox-005@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+ALERT RESOLVED
+
+Host:    prod-api-02
+Check:   Memory usage
+Status:  OK (was CRITICAL)
+Value:   62% (was 94%)
+Duration: 47 minutes
+
+The alert has auto-resolved. No action required.
+
+-- Monitoring System
