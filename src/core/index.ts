@@ -40,3 +40,6 @@ export {
 // Phase 5: Restore module public API
 export type { RestoreResult, RestoreOptions } from './restore.js'
 export { restoreAccount } from './restore.js'
+
+// Phase 9: Init module public API
+export { initRepository } from './init.js'
