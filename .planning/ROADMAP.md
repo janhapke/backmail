@@ -165,7 +165,12 @@ Plans:
   3. Running `backmail init` a second time in the same directory prints a "repository already exists" error and exits non-zero without modifying anything
   4. In a non-TTY or CI environment (piped stdin), `init` exits with a clear error if any required parameter is missing from the CLI flags
 **UI hint**: yes
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 09-01-PLAN.md — Install @inquirer/prompts + create RED test stubs (tests/unit/init.test.ts, cli-boundary.test.ts extension)
+- [ ] 09-02-PLAN.md — Core init module (src/core/init.ts: initRepository(); re-export via src/core/index.ts)
+- [ ] 09-03-PLAN.md — CLI init command (src/cli/index.ts: init [path] with all flags, TTY prompts, keyring write, non-TTY guard)
 
 ## Progress
 
@@ -182,4 +187,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. Credential Infrastructure | 0/2 | Not started | - |
 | 7. Repository Discovery | 2/2 | Complete    | 2026-04-29 |
 | 8. Command Migration | 0/2 | Not started | - |
-| 9. Init Command | 0/? | Not started | - |
+| 9. Init Command | 0/3 | Not started | - |
