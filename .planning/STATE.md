@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Core CLI
-status: milestone_complete
-last_updated: "2026-04-29T21:30:48.740Z"
-last_activity: 2026-04-29 -- Phase --phase execution started
+status: completed
+last_updated: "2026-04-30T14:25:08.715Z"
+last_activity: 2026-04-29
 progress:
-  total_phases: 3
+  total_phases: 4
   completed_phases: 3
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 6
   percent: 100
 ---
 
