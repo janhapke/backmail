@@ -9,6 +9,10 @@ import { Command } from 'commander'
 import path from 'node:path'
 import { loadRepositoryConfig, findRepository } from '../core/index.js'
 import type { RepositoryConfig } from '../core/index.js'
+import { input, confirm, password as promptPassword } from '@inquirer/prompts'
+import { Entry } from '@napi-rs/keyring'
+import { initRepository } from '../core/index.js'
+import fs from 'node:fs'
 
 const program = new Command()
 
@@ -241,6 +245,128 @@ program
       // D-19: Print error but never the URL with password (Pitfall 4, T-5-02)
       const msg = sanitizeErrorMessage(getErrorMessage(err))
       console.error(`Restore failed: ${msg}`)
+      process.exit(1)
+    }
+  })
+
+// ── Phase 9: init command ────────────────────────────────────────────────────
+program
+  .command('init [path]')
+  .description('Create a new backmail repository')
+  .option('--host <host>', 'IMAP server hostname')
+  .option('--port <port>', 'IMAP server port (default: 993)')
+  .option('--username <username>', 'IMAP account username')
+  .option('--tls', 'use TLS (default: true)')
+  .option('--no-tls', 'disable TLS')
+  .option('--password <password>', 'IMAP password (written to OS keyring)')
+  .option(
+    '--password-ref <ref>',
+    'passwordRef string written directly to config (e.g. env:BACKMAIL_PASSWORD) — use this in CI environments instead of --password',
+  )
+  .action(async (dirPath: string | undefined, opts: {
+    host?: string
+    port?: string
+    username?: string
+    tls?: boolean
+    password?: string
+    passwordRef?: string
+  }) => {
+    const targetDir = dirPath ? path.resolve(dirPath) : process.cwd()
+
+    // REPO-04: check before prompting — avoid collecting credentials for a repo that already exists
+    if (fs.existsSync(path.join(targetDir, '.backmail'))) {
+      console.error(`Repository already exists at ${targetDir}. Remove .backmail/ to reinitialize.`)
+      process.exit(1)
+    }
+
+    // process.stdin.isTTY is true only on a real TTY; undefined when piped, false when explicitly set off
+    const isTTY = process.stdin.isTTY === true
+
+    let host: string
+    if (opts.host !== undefined) {
+      host = opts.host
+    } else if (isTTY) {
+      host = await input({ message: 'IMAP host:', required: true })
+    } else {
+      console.error('Error: --host is required in non-TTY mode')
+      process.exit(1)
+    }
+
+    let port: number
+    if (opts.port !== undefined) {
+      const parsed = parseInt(opts.port, 10)
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
+        console.error('Error: --port must be an integer between 1 and 65535')
+        process.exit(1)
+      }
+      port = parsed
+    } else if (isTTY) {
+      const portStr = await input({
+        message: 'IMAP port:',
+        default: '993',
+        validate: (v) => {
+          const n = parseInt(v, 10)
+          return (Number.isInteger(n) && n >= 1 && n <= 65535) || 'Port must be an integer 1–65535'
+        },
+      })
+      port = parseInt(portStr, 10)
+    } else {
+      console.error('Error: --port is required in non-TTY mode')
+      process.exit(1)
+    }
+
+    let username: string
+    if (opts.username !== undefined) {
+      username = opts.username
+    } else if (isTTY) {
+      username = await input({ message: 'IMAP username:', required: true })
+    } else {
+      console.error('Error: --username is required in non-TTY mode')
+      process.exit(1)
+    }
+
+    let tls: boolean
+    if (opts.tls !== undefined) {
+      tls = opts.tls
+    } else if (isTTY) {
+      tls = await confirm({ message: 'Use TLS?', default: true })
+    } else {
+      console.error('Error: --tls or --no-tls is required in non-TTY mode')
+      process.exit(1)
+    }
+
+    let passwordRef: string
+    if (opts.passwordRef !== undefined) {
+      passwordRef = opts.passwordRef
+    } else {
+      let plaintext: string
+      if (opts.password !== undefined) {
+        plaintext = opts.password
+      } else if (isTTY) {
+        plaintext = await promptPassword({ message: 'IMAP password:', mask: true })
+      } else {
+        console.error('Error: --password or --password-ref is required in non-TTY mode')
+        process.exit(1)
+      }
+      try {
+        new Entry('backmail', username).setPassword(plaintext)
+      } catch (err) {
+        console.error(
+          `Error: Failed to write password to OS keyring: ${getErrorMessage(err)}\n` +
+          'Use --password-ref env:BACKMAIL_PASSWORD for CI environments.',
+        )
+        process.exit(1)
+      }
+      passwordRef = `keyring:service=backmail;account=${username}`
+    }
+
+    const config: RepositoryConfig = { host, port, username, tls, passwordRef }
+
+    try {
+      await initRepository(targetDir, config, passwordRef)
+      console.log(`Initialized backmail repository at ${targetDir}`)
+    } catch (err) {
+      console.error(getErrorMessage(err))
       process.exit(1)
     }
   })
