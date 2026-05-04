@@ -315,6 +315,7 @@ npm run build        # compiles to dist/
 ```sh
 npm test                      # unit tests (vitest)
 npm run test:watch            # watch mode
+npm run test:coverage         # unit tests with coverage report (outputs to coverage/)
 npm run test:integration      # integration tests against a local Dovecot container
 ```
 
