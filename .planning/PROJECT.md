@@ -34,18 +34,19 @@ The git repo IS the backup — point-in-time restore, local search, and provider
 - ✓ `backmail ls [folder]` lists folders or messages — Phase 4
 - ✓ `backmail view <message-id> --format [eml|plaintext|json]` renders an email — Phase 4
 - ✓ `backmail restore --to <imap-url>` re-uploads messages with skip-duplicates and dry-run — Phase 5
+- ✓ `passwordRef` format `keyring:service=backmail;account=<username>` parses and resolves from OS keyring — Phase 6
+- ✓ `BACKMAIL_PASSWORD` env var accepted as credential fallback (no keyring required) — Phase 6
+- ✓ Commands auto-detect the backmail repository by walking up from CWD looking for `.backmail/` — Phase 7
+- ✓ `--workdir <path>` global flag overrides auto-detection for all commands — Phase 7
+- ✓ All existing commands (sync, log, ls, view, checkout, restore) work correctly with the new repository structure — Phase 8
+- ✓ `--account` flag and central account registry removed from all commands — Phase 8
+- ✓ `backmail init [path]` creates `.backmail/config.json`, `.backmail/log`, `archive/` (git repo), and `worktrees/` — Phase 9
+- ✓ `init` prompts interactively for missing parameters in TTY; requires all params as flags in non-TTY/CI — Phase 9
+- ✓ `init` stores password in OS keyring and writes `passwordRef` to config.json — Phase 9
+- ✓ `init` is non-destructive — refuses to overwrite an existing repository — Phase 9
 
 ### Active
 
-- [ ] `backmail init` creates a backmail repository (`.backmail/config.json`, `.backmail/log`, `archive/` git repo, `worktrees/`)
-- [ ] `init` prompts interactively for any parameters not supplied as CLI flags; accepts all params as flags for full automation
-- [ ] `init` stores the password in the OS keyring and writes a `passwordRef` into config.json
-- [x] `passwordRef` format: `"keyring:service=backmail;account=<username>"` (extensible — parser also handles `env:VAR`) *(validated Phase 6)*
-- [x] `BACKMAIL_PASSWORD` env var accepted as password fallback (no keyring required) *(validated Phase 6)*
-- [x] Commands auto-detect the backmail repository by walking up from CWD looking for `.backmail/` *(validated Phase 7)*
-- [x] `--workdir <path>` global flag overrides auto-detection for all commands *(validated Phase 7)*
-- [x] All existing commands (sync, log, ls, view, checkout, restore) work correctly with the new repository structure *(validated Phase 8)*
-- [x] `--account` flag and central account registry removed from all commands *(validated Phase 8)*
 - [ ] Core sync logic remains a clean TypeScript module (eimerjs IPC boundary for future Electron integration)
 
 ### Out of Scope
@@ -107,4 +108,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-29 — Phase 8 complete (command migration: account registry removed, all commands use archive/ path derivation)*
+*Last updated: 2026-05-04 — Phase 9 complete (init command: interactive prompts, keyring credential storage, CI-safe non-TTY mode) — v1.1 milestone complete*

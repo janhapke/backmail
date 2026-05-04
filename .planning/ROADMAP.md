@@ -24,10 +24,10 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 ### v1.1 — Repository-Centric UX
 
-- [ ] **Phase 6: Credential Infrastructure** - New config types, passwordRef format parsing, and keyring/env-var credential resolution
-- [x] **Phase 7: Repository Discovery** - Walk-up `.backmail/` detection and `--workdir` global flag for all commands (completed 2026-04-29)
-- [ ] **Phase 8: Command Migration** - All existing commands derive paths from `archive/` and the `--account` registry is removed
-- [ ] **Phase 9: Init Command** - Interactive `backmail init` with prompts, keyring write, and CI/non-TTY safety
+- [x] **Phase 6: Credential Infrastructure** - New config types, passwordRef format parsing, and keyring/env-var credential resolution *(completed 2026-04-29)*
+- [x] **Phase 7: Repository Discovery** - Walk-up `.backmail/` detection and `--workdir` global flag for all commands *(completed 2026-04-29)*
+- [x] **Phase 8: Command Migration** - All existing commands derive paths from `archive/` and the `--account` registry is removed *(completed 2026-04-29)*
+- [x] **Phase 9: Init Command** - Interactive `backmail init` with prompts, keyring write, and CI/non-TTY safety *(completed 2026-05-01)*
 
 ## Phase Details
 
@@ -168,9 +168,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 09-01-PLAN.md — Install @inquirer/prompts + create RED test stubs (tests/unit/init.test.ts, cli-boundary.test.ts extension)
-- [ ] 09-02-PLAN.md — Core init module (src/core/init.ts: initRepository(); re-export via src/core/index.ts)
-- [ ] 09-03-PLAN.md — CLI init command (src/cli/index.ts: init [path] with all flags, TTY prompts, keyring write, non-TTY guard)
+- [x] 09-01-PLAN.md — Install @inquirer/prompts + create RED test stubs (tests/unit/init.test.ts, cli-boundary.test.ts extension)
+- [x] 09-02-PLAN.md — Core init module (src/core/init.ts: initRepository(); re-export via src/core/index.ts)
+- [x] 09-03-PLAN.md — CLI init command (src/cli/index.ts: init [path] with all flags, TTY prompts, keyring write, non-TTY guard)
 
 ## Progress
 
@@ -184,7 +184,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 3. Sync | 3/3 | Complete | 2006-04-22 |
 | 4. Browse | 3/3 | Complete | - |
 | 5. Restore | 3/3 | Complete | - |
-| 6. Credential Infrastructure | 0/2 | Not started | - |
-| 7. Repository Discovery | 2/2 | Complete    | 2026-04-29 |
-| 8. Command Migration | 0/2 | Not started | - |
-| 9. Init Command | 0/3 | Not started | - |
+| 6. Credential Infrastructure | 2/2 | Complete | 2026-04-29 |
+| 7. Repository Discovery | 2/2 | Complete | 2026-04-29 |
+| 8. Command Migration | 2/2 | Complete | 2026-04-29 |
+| 9. Init Command | 3/3 | Complete | 2026-05-01 |

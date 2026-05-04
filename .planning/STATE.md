@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: — Core CLI
-status: executing
-last_updated: "2026-04-30T21:04:27.164Z"
-last_activity: 2026-04-30 -- Phase --phase execution started
+milestone: v1.1
+milestone_name: — Repository-Centric UX
+status: milestone_complete
+last_updated: "2026-05-04T09:42:00.000Z"
+last_activity: 2026-05-01 -- Phase 9 (init-command) complete
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 9
-  completed_plans: 6
-  percent: 67
+  completed_plans: 9
+  percent: 100
 ---
 
 # Project State
@@ -20,14 +20,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-28)
 
 **Core value:** The git repo IS the backup — point-in-time restore, local search, and provider independence without trusting any third-party service.
-**Current focus:** Phase --phase — 9
+**Current focus:** Milestone v1.1 complete
 
 ## Current Position
 
-Phase: --phase (9) — EXECUTING
-Plan: 1 of --name
-Status: Executing Phase --phase
-Last activity: 2026-04-30 -- Phase --phase execution started
+Phase: 09
+Status: Milestone complete
+Last activity: 2026-05-04
 
 Progress: [██████████] 100%
 
@@ -50,6 +49,8 @@ New in v1.1:
 - Repository structure: `.backmail/` marker + `archive/` git repo + `worktrees/` (all siblings)
 - passwordRef format: `keyring:service=backmail;account=<username>` (extensible — parser also handles `env:VAR`)
 - Build order: credential infrastructure → discovery → command migration → init command
+- isTTY detection: `process.stdin.isTTY === true` (not `!== false`) — undefined means piped/non-TTY
+- REPO-04 guard must check existence BEFORE collecting any prompts
 
 ### Pending Todos
 
@@ -66,5 +67,3 @@ Carried from v1.0:
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
 | Bug | CR-01: Unsafe BigInt() from corrupted folder JSON state | Deferred | Phase 3 (v1.0) |
-
-**Planned Phase:** 9 (Init Command) — 3 plans — 2026-04-30T20:54:48.908Z
