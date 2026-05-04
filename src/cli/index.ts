@@ -18,7 +18,7 @@ const program = new Command()
 
 program
   .name('backmail')
-  .description('Mirror IMAP mailboxes to git')
+  .description('Backup Mail to git')
   .version('0.1.0')
   .option('--workdir <path>', 'path to backmail repository (default: auto-detect from CWD)')
 
