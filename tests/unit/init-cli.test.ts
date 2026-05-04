@@ -47,7 +47,7 @@ describe('REPO-05: init command non-TTY mode — errors on missing required flag
     }
   })
 
-  it('exits 1 with --password error when host/port/username/tls are provided but password is missing in non-TTY mode', () => {
+  it('exits 1 with --password error when host/port/username are provided but password is missing in non-TTY mode', () => {
     const tmpDir = fs.mkdtempSync(resolve(os.tmpdir(), 'backmail-init-cli-test-'))
     try {
       const result = runCliNonTTY([
@@ -55,7 +55,6 @@ describe('REPO-05: init command non-TTY mode — errors on missing required flag
         '--host', 'imap.example.com',
         '--port', '993',
         '--username', 'user@example.com',
-        '--tls',
       ])
       expect(result.status).toBe(1)
       expect(result.stderr).toContain('Error: --password or --password-ref is required in non-TTY mode')

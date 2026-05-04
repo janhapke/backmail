@@ -326,16 +326,6 @@ program
       process.exit(1)
     }
 
-    let tls: boolean
-    if (opts.tls !== undefined) {
-      tls = opts.tls
-    } else if (isTTY) {
-      tls = await confirm({ message: 'Use TLS?', default: true })
-    } else {
-      console.error('Error: --tls or --no-tls is required in non-TTY mode')
-      process.exit(1)
-    }
-
     let passwordRef: string
     if (opts.passwordRef !== undefined) {
       passwordRef = opts.passwordRef
@@ -359,6 +349,16 @@ program
         process.exit(1)
       }
       passwordRef = `keyring:service=backmail;account=${username}`
+    }
+
+    let tls: boolean
+    if (opts.tls !== undefined) {
+      tls = opts.tls
+    } else if (isTTY) {
+      tls = await confirm({ message: 'Use TLS?', default: true })
+    } else {
+      console.error('Error: --tls or --no-tls is required in non-TTY mode')
+      process.exit(1)
     }
 
     const config: RepositoryConfig = { host, port, username, tls, passwordRef }
