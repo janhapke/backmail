@@ -132,7 +132,8 @@ program
     try {
       const repoRoot = getRepoRoot()
       const archivePath = path.join(repoRoot, 'archive')
-      const result = await checkoutCommit(archivePath, dateOrHash)
+      const worktreesDir = path.join(repoRoot, 'worktrees')
+      const result = await checkoutCommit(archivePath, dateOrHash, worktreesDir)
       console.log(`Checked out ${dateOrHash} (${result.sha}) → ${result.path}`)
     } catch (err) {
       console.error((err as Error).message)

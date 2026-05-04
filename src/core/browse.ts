@@ -47,23 +47,6 @@ async function resolveDate(repoPath: string, dateStr: string): Promise<string> {
   return log.latest!.hash
 }
 
-/**
- * Ensure .worktrees/ is in .gitignore so worktrees are never tracked by git
- */
-async function ensureWorktreesIgnored(repoPath: string): Promise<void> {
-  const gitignorePath = path.join(repoPath, '.gitignore')
-  let content = ''
-  try {
-    content = await fs.readFile(gitignorePath, 'utf-8')
-  } catch {
-    // File doesn't exist, start with empty
-  }
-  if (!content.includes('.worktrees/')) {
-    const toAppend = content.endsWith('\n') ? '.worktrees/\n' : '\n.worktrees/\n'
-    await fs.appendFile(gitignorePath, toAppend)
-  }
-}
-
 // ── Browse Functions (Implementation for Phase 04-02) ──────────────────────
 
 /**
@@ -90,31 +73,31 @@ export async function getLog(repoPath: string, limit: number | 'unlimited'): Pro
  * If worktree already exists, remove it first.
  * Supports both date strings (YYYY-MM-DD) and commit hashes.
  *
- * @param repoPath - Path to the mail repository
+ * @param repoPath - Path to the git archive directory
  * @param dateOrHash - Date (YYYY-MM-DD) or commit hash to check out
+ * @param worktreesDir - Directory where worktrees are placed (outside the git repo)
  * @returns Object with path to worktree and short SHA
  */
 export async function checkoutCommit(
   repoPath: string,
-  dateOrHash: string
+  dateOrHash: string,
+  worktreesDir: string,
 ): Promise<{ path: string; sha: string }> {
   const git = simpleGit(repoPath)
 
-  // Resolve date to commit hash if needed
   let commitHash: string
   let worktreeName: string
 
   if (isDateString(dateOrHash)) {
-    // Date input: resolve to commit hash
     commitHash = await resolveDate(repoPath, dateOrHash)
-    worktreeName = dateOrHash // use date as worktree name
+    worktreeName = dateOrHash
   } else {
-    // Commit hash input: use as-is
     commitHash = dateOrHash
-    worktreeName = dateOrHash.slice(0, 7) // use first 7 chars as worktree name
+    worktreeName = dateOrHash.slice(0, 7)
   }
 
-  const worktreePath = path.join(repoPath, '.worktrees', worktreeName)
+  await fs.mkdir(worktreesDir, { recursive: true })
+  const worktreePath = path.join(worktreesDir, worktreeName)
 
   // Remove existing worktree if present
   try {
@@ -130,11 +113,7 @@ export async function checkoutCommit(
     // Directory didn't exist, ignore
   }
 
-  // Create new worktree
   await git.raw(['worktree', 'add', worktreePath, commitHash])
-
-  // Ensure .worktrees/ is in .gitignore
-  await ensureWorktreesIgnored(repoPath)
 
   return {
     path: path.resolve(worktreePath),

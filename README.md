@@ -1,8 +1,8 @@
 # backmail
 
-Mirror IMAP mailboxes to git. The repo is the backup — browse, search, and restore email at any point in history without trusting a third-party service.
+Mirror an IMAP mailbox to git. The repo is the backup — browse, search, and restore email at any point in history without trusting a third-party service.
 
-Each account gets its own git repository. Messages are stored as `.eml` files named by Message-ID, so identical messages (e.g. Gmail labels) are deduplicated at the git level. Every sync run produces a commit with a `+added / -removed` summary. Deletions are mirrored — if you remove a message from your mailbox, the next sync removes it from the repo (git history still has it).
+Each backmail repository tracks one IMAP account. Messages are stored as `.eml` files named by Message-ID, so identical messages (e.g. Gmail labels) are deduplicated at the git level. Every sync run produces a commit with a `+added / -removed` summary. Deletions are mirrored — if you remove a message from your mailbox, the next sync removes it from the repo (git history still has it).
 
 ---
 
@@ -21,75 +21,140 @@ cd backmail
 npm install
 ```
 
-### Configure
+### Create a repository
 
-Create `~/.config/backmail/config.json` (macOS: `~/Library/Application Support/backmail/config.json`):
-
-```json
-{
-  "accounts": {
-    "personal": {
-      "host": "imap.example.com",
-      "port": 993,
-      "username": "you@example.com",
-      "tls": true,
-      "repoPath": "~/mail/personal"
-    }
-  }
-}
-```
-
-| Field | Description |
-|-------|-------------|
-| `host` | IMAP hostname |
-| `port` | IMAP port (typically `993` for TLS, `143` for plain) |
-| `username` | IMAP login |
-| `tls` | `true` to use TLS/SSL |
-| `repoPath` | Where to store the git backup repo (created automatically) |
-
-You can add as many accounts as you like under `accounts`. Account names must be alphanumeric (`a-z`, `0-9`, `-`, `_`).
-
-### Store your password
-
-Passwords are **not** stored in the config file. backmail reads them from the system keyring or an environment variable.
-
-**System keyring** (recommended):
+Each backmail repository tracks one IMAP account. Run `init` inside the directory you want to use (it will be created if it doesn't exist):
 
 ```sh
-# macOS Keychain / GNOME Keyring / KWallet
-secret-tool store --label="backmail personal" service backmail username personal
+backmail init ~/mail/personal
 ```
 
-**Environment variable** (CI / headless servers):
+On a TTY backmail prompts for connection details. To script the setup pass flags directly:
 
 ```sh
-export BACKMAIL_PERSONAL_PASSWORD="your-app-password"
+backmail init ~/mail/personal \
+  --host imap.example.com \
+  --port 993 \
+  --username you@example.com \
+  --tls \
+  --password-ref env:BACKMAIL_PASSWORD
 ```
 
-The env var pattern is `BACKMAIL_<ACCOUNT_UPPERCASED>_PASSWORD`.
+| Option | Description |
+|--------|-------------|
+| `--host <host>` | IMAP server hostname |
+| `--port <port>` | IMAP port (default: `993`) |
+| `--username <user>` | IMAP login |
+| `--tls` / `--no-tls` | Enable or disable TLS (default: TLS on) |
+| `--password <pass>` | Password written to the OS keyring |
+| `--password-ref <ref>` | Password reference written directly to config (see below) |
+
+After `init`, the directory contains:
+
+```
+.backmail/
+  config.json     # IMAP connection settings
+archive/          # git repository — one .eml per message
+worktrees/        # point-in-time checkouts land here
+```
+
+### Passwords
+
+Passwords are **not** stored in plain text. backmail stores a `passwordRef` that points to the actual credential at runtime.
+
+**OS keyring** (recommended — set by `--password` during `init`):
+
+The password is saved under the service `backmail` with the account key set to your username. The config will contain:
+
+```
+keyring:service=backmail;account=you@example.com
+```
+
+**Environment variable** (CI / headless servers — use `--password-ref`):
+
+```sh
+export BACKMAIL_PASSWORD="your-app-password"
+backmail init ~/mail/personal --password-ref env:BACKMAIL_PASSWORD ...
+```
+
+The `env:` form reads the named variable at sync time. `BACKMAIL_PASSWORD` is also checked as a universal fallback if no other credential resolves.
 
 For Gmail, use an [app password](https://support.google.com/accounts/answer/185833) rather than your main account password.
 
 ---
 
+## Running commands
+
+Run commands from **inside** a backmail repository (backmail walks up the directory tree to find the `.backmail/` marker, just like git finds `.git/`). Use `--workdir` to point at a different repository from outside it.
+
+```sh
+cd ~/mail/personal
+backmail sync
+
+# or from anywhere:
+backmail --workdir ~/mail/personal sync
+```
+
+During development, prefix with `npm run dev --`:
+
+```sh
+npm run dev -- sync
+```
+
+After building, run the compiled binary directly:
+
+```sh
+node dist/cli/index.js sync
+```
+
+### Global option
+
+| Option | Description |
+|--------|-------------|
+| `--workdir <path>` | Path to a backmail repository (default: auto-detect from CWD) |
+
+---
+
 ## Commands
 
-Run commands via `npm run dev -- <command>` during development, or `node dist/cli/index.js <command>` after building.
+---
+
+### `init`
+
+Create a new backmail repository.
+
+```sh
+backmail init [path]
+backmail init ~/mail/personal --host imap.example.com --port 993 --username you@example.com --tls --password-ref env:BACKMAIL_PASSWORD
+```
+
+`path` defaults to the current directory. Fails if a `.backmail/` directory already exists there.
+
+| Option | Description |
+|--------|-------------|
+| `--host <host>` | IMAP server hostname |
+| `--port <port>` | IMAP port (default: `993`) |
+| `--username <user>` | IMAP login |
+| `--tls` / `--no-tls` | Use TLS (default: on) |
+| `--password <pass>` | Plaintext password — stored in the OS keyring |
+| `--password-ref <ref>` | Password reference string written to config (e.g. `env:BACKMAIL_PASSWORD`) |
+
+On a real TTY, any omitted option is prompted interactively. In non-TTY mode (CI, pipes) all options are required.
 
 ---
 
 ### `sync`
 
-Sync one or all IMAP accounts to git.
+Sync the IMAP mailbox to git.
 
 ```sh
-backmail sync <account>
-backmail sync --all
+backmail sync
+backmail sync --only-folder INBOX --only-folder Sent
+backmail sync --exclude-folder Spam --verbose
 ```
 
 | Option | Description |
 |--------|-------------|
-| `--all` | Sync all configured accounts |
 | `--exclude-folder <name>` | Skip a folder (repeatable) |
 | `--only-folder <name>` | Restrict to a folder (repeatable) |
 | `--verbose` | Log one line per folder and per message |
@@ -99,36 +164,32 @@ backmail sync --all
 Output:
 
 ```
-personal: +42 added / -3 removed
+sync: +42 added / -3 removed
 ```
 
-If any folder fails the sync continues and the summary line is tagged `[partial]`.
+If any folder fails the sync continues and the summary line is tagged `[partial]`:
 
----
-
-### `accounts`
-
-List all configured account names.
-
-```sh
-backmail accounts
 ```
+sync [partial]: +10 added / -0 removed
+folder INBOX/Archive failed: connection reset
+```
+
+Exit code is non-zero when any folder fails.
 
 ---
 
 ### `log`
 
-Show git commit history for an account.
+Show git commit history for the repository.
 
 ```sh
 backmail log
-backmail log --account personal --limit 50
-backmail log --account personal --limit unlimited
+backmail log --limit 50
+backmail log --limit unlimited
 ```
 
 | Option | Description |
 |--------|-------------|
-| `--account <name>` | Account name (optional when only one account is configured) |
 | `--limit <n>` | Number of commits to show, or `unlimited` (default: `20`) |
 
 ---
@@ -140,7 +201,6 @@ List folders, or list messages within a folder.
 ```sh
 backmail ls
 backmail ls INBOX
-backmail ls --account personal INBOX
 ```
 
 When a folder name is given, each message is printed as:
@@ -148,10 +208,6 @@ When a folder name is given, each message is printed as:
 ```
 <message-id>  <date>  <from>  <subject>
 ```
-
-| Option | Description |
-|--------|-------------|
-| `--account <name>` | Account name (optional when only one account is configured) |
 
 ---
 
@@ -167,30 +223,26 @@ backmail view "<unique-id@host>" --format json
 
 | Option | Description |
 |--------|-------------|
-| `--account <name>` | Account name (optional when only one account is configured) |
 | `--format <fmt>` | `plaintext` (default), `eml`, or `json` |
 
 ---
 
 ### `checkout`
 
-Create a git worktree at a point in history. Non-destructive — sync keeps working on the main tree while you browse.
+Create a git worktree at a point in history. Non-destructive — sync keeps working on the main archive while you browse the snapshot.
 
 ```sh
 backmail checkout 2024-01-15
 backmail checkout abc1234
-backmail checkout --account personal 2024-01-15
 ```
 
-The argument can be a date (`YYYY-MM-DD`) or a commit hash. Output:
+The argument can be a date (`YYYY-MM-DD`) or a commit hash. The worktree is placed under `worktrees/` (a sibling of `archive/`, outside the git repository):
 
 ```
-Checked out 2024-01-15 (abc1234f) → /home/you/mail/personal-2024-01-15
+Checked out 2024-01-15 (abc1234f) → /home/you/mail/personal/worktrees/2024-01-15
 ```
 
-| Option | Description |
-|--------|-------------|
-| `--account <name>` | Account name (optional when only one account is configured) |
+If a worktree for that reference already exists it is replaced.
 
 ---
 
@@ -209,7 +261,6 @@ The optional `date|commit` argument restores from a point-in-time snapshot (same
 | Option | Description |
 |--------|-------------|
 | `--to <imap-url>` | Target IMAP URL — `imap://` or `imaps://` with credentials |
-| `--account <name>` | Account name (optional when only one account is configured) |
 | `--skip-duplicates <yes\|no>` | Check Message-ID before uploading (default: `yes`) |
 | `--dry-run` | Show what would be uploaded without writing anything |
 | `--verbose` | Log one line per message |
@@ -220,37 +271,35 @@ Output:
 Total: 1204 uploaded, 38 skipped
 ```
 
-If any uploads fail the exit code is non-zero and a retry hint is printed.
+If any uploads fail the exit code is non-zero and a retry hint is printed. Re-run with `--skip-duplicates=yes` to safely retry — already-uploaded messages are skipped.
 
 ---
 
 ## Repository Layout
 
-Each account's git repo has this structure:
-
 ```
-messages/
-  <message-id>.eml     # one file per message
-folders/
-  <folder-name>.json   # uidvalidity + uid/message-id/flags array per folder
+.backmail/
+  config.json       # IMAP connection settings + passwordRef
+archive/            # git repository
+  messages/
+    <message-id>.eml     # one file per message
+  folders/
+    <folder-name>.json   # uidvalidity + uid/message-id/flags per folder
+worktrees/          # point-in-time checkouts (outside the git repo)
+  2024-01-15/
+  abc1234/
 ```
 
-Messages are content-addressed by Message-ID, so identical emails that appear in multiple folders (common with Gmail labels) are stored only once.
+Messages are content-addressed by Message-ID, so identical emails that appear in multiple IMAP folders (common with Gmail labels) are stored only once.
 
 ---
 
 ## Development
 
-### Setup
-
-```sh
-npm install
-```
-
 ### Run without building
 
 ```sh
-npm run dev -- sync personal
+npm run dev -- sync
 ```
 
 `tsx` executes TypeScript directly — no build step needed during development.
@@ -264,9 +313,9 @@ npm run build        # compiles to dist/
 ### Tests
 
 ```sh
-npm test             # unit tests (vitest)
-npm run test:watch   # watch mode
-npm run test:integration  # integration tests against a local Dovecot container
+npm test                      # unit tests (vitest)
+npm run test:watch            # watch mode
+npm run test:integration      # integration tests against a local Dovecot container
 ```
 
 Integration tests require Docker. The test runner starts a [minimal-imap](https://github.com/gmitirol/minimal-imap) Dovecot container automatically.

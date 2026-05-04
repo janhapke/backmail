@@ -155,7 +155,8 @@ export async function restoreAccount(
   // D-02, D-03: Resolve source path (from main repo or worktree)
   let sourcePath = archivePath
   if (dateOrCommit) {
-    const checkout = await checkoutCommit(archivePath, dateOrCommit)
+    const worktreesDir = path.join(path.dirname(archivePath), 'worktrees')
+    const checkout = await checkoutCommit(archivePath, dateOrCommit, worktreesDir)
     sourcePath = checkout.path
   }
 

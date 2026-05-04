@@ -7,6 +7,7 @@ import { sanitizeMessageId, folderPathToFilename } from '../../src/core/sync.js'
 
 let tmpDir: string
 let tmpRepo: string
+let worktreesDir: string
 
 // Helper to capture console output
 function captureOutput(fn: () => void): { stdout: string; stderr: string } {
@@ -35,6 +36,7 @@ beforeAll(async () => {
   // Create temp directory structure
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'backmail-cli-test-'))
   tmpRepo = path.join(tmpDir, 'mail-repo')
+  worktreesDir = path.join(tmpDir, 'worktrees')
 
   // Initialize git repo
   await fs.mkdir(tmpRepo)
@@ -165,15 +167,15 @@ describe('CLI Browse Commands', () => {
     it('creates worktree for date', async () => {
       const { checkoutCommit } = await import('../../src/core/browse.js')
 
-      const result = await checkoutCommit(tmpRepo, '2024-01-01')
+      const result = await checkoutCommit(tmpRepo, '2024-01-01', worktreesDir)
 
       expect(result.path).toBeDefined()
       expect(result.sha).toBeDefined()
-      expect(result.path).toContain('.worktrees')
+      expect(result.path).toContain(worktreesDir)
       expect(result.sha.length).toBe(7)
 
-      // Verify worktree directory exists
-      const worktreeDir = path.join(tmpRepo, '.worktrees', '2024-01-01')
+      // Verify worktree directory exists at the expected location
+      const worktreeDir = path.join(worktreesDir, '2024-01-01')
       const exists = await fs.stat(worktreeDir).then(() => true).catch(() => false)
       expect(exists).toBe(true)
     })
@@ -181,33 +183,22 @@ describe('CLI Browse Commands', () => {
     it('prints correct output format', async () => {
       const { checkoutCommit } = await import('../../src/core/browse.js')
 
-      const result = await checkoutCommit(tmpRepo, '2024-01-02')
+      const result = await checkoutCommit(tmpRepo, '2024-01-02', worktreesDir)
       const output = `Checked out 2024-01-02 (${result.sha}) → ${result.path}`
 
       expect(output).toMatch(/Checked out 2024-01-02 \([a-f0-9]{7}\) → /)
-      expect(output).toContain('.worktrees')
+      expect(output).toContain(worktreesDir)
     })
 
     it('works with commit hash', async () => {
-      // Get a commit hash from git log
       const commits = execSync('git log --oneline | head -1', { cwd: tmpRepo, encoding: 'utf-8' })
       const commitHash = commits.split(' ')[0]
 
       const { checkoutCommit } = await import('../../src/core/browse.js')
 
-      const result = await checkoutCommit(tmpRepo, commitHash.substring(0, 7))
+      const result = await checkoutCommit(tmpRepo, commitHash.substring(0, 7), worktreesDir)
       expect(result.path).toBeDefined()
       expect(result.sha).toBeDefined()
-    })
-
-    it('.worktrees/ added to .gitignore', async () => {
-      await fs.rm(path.join(tmpRepo, '.worktrees'), { recursive: true, force: true })
-
-      const { checkoutCommit } = await import('../../src/core/browse.js')
-      await checkoutCommit(tmpRepo, '2024-01-03')
-
-      const gitignore = await fs.readFile(path.join(tmpRepo, '.gitignore'), 'utf-8').catch(() => '')
-      expect(gitignore).toContain('.worktrees/')
     })
   })
 

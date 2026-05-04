@@ -207,28 +207,25 @@ describe('viewMessage integration', () => {
 })
 
 describe('checkoutCommit integration', () => {
-  it('creates .worktrees directory with git worktree', async () => {
-    // Get a real commit hash from the repo
+  let worktreesDir: string
+
+  beforeAll(async () => {
+    worktreesDir = await fs.mkdtemp(path.join(os.tmpdir(), 'backmail-worktrees-'))
+  })
+
+  afterAll(async () => {
+    await fs.rm(worktreesDir, { recursive: true, force: true })
+  })
+
+  it('creates worktree in the given worktreesDir', async () => {
     const log = await getLog(tmpRepo, 1)
     expect(log.length).toBeGreaterThan(0)
-    // Extract a date from the log message (format: YYYY-MM-DD: ...)
     const dateMatch = log[0]?.match(/^(\d{4}-\d{2}-\d{2})/)
     expect(dateMatch).toBeTruthy()
     const date = dateMatch![1]
 
-    const result = await checkoutCommit(tmpRepo, date)
-    expect(result.path).toContain('.worktrees')
-    expect(result.sha).toHaveLength(7) // short SHA is 7 chars
-  })
-
-  it('ensures .worktrees/ in .gitignore', async () => {
-    // Get a real commit date from the repo
-    const log = await getLog(tmpRepo, 1)
-    const dateMatch = log[0]?.match(/^(\d{4}-\d{2}-\d{2})/)
-    const date = dateMatch![1]
-
-    await checkoutCommit(tmpRepo, date)
-    const gitignore = await fs.readFile(path.join(tmpRepo, '.gitignore'), 'utf-8')
-    expect(gitignore).toContain('.worktrees/')
+    const result = await checkoutCommit(tmpRepo, date, worktreesDir)
+    expect(result.path).toContain(worktreesDir)
+    expect(result.sha).toHaveLength(7)
   })
 })
