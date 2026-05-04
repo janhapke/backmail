@@ -17,10 +17,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-28)
+See: .planning/PROJECT.md (updated 2026-05-04)
 
 **Core value:** The git repo IS the backup — point-in-time restore, local search, and provider independence without trusting any third-party service.
-**Current focus:** Milestone v1.1 complete
+**Current focus:** Planning next milestone (v1.2)
 
 ## Current Position
 
