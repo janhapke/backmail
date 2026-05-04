@@ -61,10 +61,10 @@ describe('SYNC-01: end-to-end incremental fetch', () => {
       port: IMAP_PORT,
       username: IMAP_USER,
       tls: false,
-      repoPath: tmpRepo,
+      passwordRef: 'env:BACKMAIL_TEST_PASSWORD',
     }
 
-    const result = await syncAccount('test', accountConfig, {
+    const result = await syncAccount(accountConfig, tmpRepo, {
       excludeFolders: [],
       onlyFolders: [],
       verbose: false,
@@ -108,11 +108,11 @@ describe('SYNC-03: deletion mirroring', () => {
       port: IMAP_PORT,
       username: IMAP_USER,
       tls: false,
-      repoPath: tmpRepo,
+      passwordRef: 'env:BACKMAIL_TEST_PASSWORD',
     }
 
     // First sync to establish baseline
-    const firstSync = await syncAccount('test', accountConfig, {
+    const firstSync = await syncAccount(accountConfig, tmpRepo, {
       excludeFolders: [],
       onlyFolders: [],
       verbose: false,
@@ -139,11 +139,11 @@ describe('SYNC-05: uidvalidity change triggers full re-sync', () => {
       port: IMAP_PORT,
       username: IMAP_USER,
       tls: false,
-      repoPath: tmpRepo,
+      passwordRef: 'env:BACKMAIL_TEST_PASSWORD',
     }
 
     // First sync to establish baseline
-    const firstSync = await syncAccount('test', accountConfig, {
+    const firstSync = await syncAccount(accountConfig, tmpRepo, {
       excludeFolders: [],
       onlyFolders: [],
       verbose: false,

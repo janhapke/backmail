@@ -13,21 +13,34 @@ let configDir: string
 beforeAll(async () => {
   // Create temp directory structure for CLI tests
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'backmail-cli-restore-test-'))
+  // tmpRepo is the backmail repository root — contains .backmail/ and archive/
   tmpRepo = path.join(tmpDir, 'mail-repo')
   configDir = path.join(tmpDir, '.config', 'backmail')
 
-  // Initialize git repo
-  await fs.mkdir(tmpRepo)
-  execSync('git init', { cwd: tmpRepo })
-  execSync('git config user.email "test@example.com"', { cwd: tmpRepo })
-  execSync('git config user.name "Test User"', { cwd: tmpRepo })
+  // Create .backmail/ config that loadRepositoryConfig() expects
+  await fs.mkdir(path.join(tmpRepo, '.backmail'), { recursive: true })
+  const repoCfg = {
+    host: 'localhost',
+    port: 143,
+    username: 'testuser',
+    tls: false,
+    passwordRef: 'env:BACKMAIL_TEST_PASSWORD',
+  }
+  await fs.writeFile(path.join(tmpRepo, '.backmail', 'config.json'), JSON.stringify(repoCfg))
 
-  // Create folders and messages directories
-  await fs.mkdir(path.join(tmpRepo, 'folders'))
-  await fs.mkdir(path.join(tmpRepo, 'messages'))
+  // Create archive/ subdirectory — this is what the CLI passes as archivePath
+  const archivePath = path.join(tmpRepo, 'archive')
+  await fs.mkdir(path.join(archivePath, 'folders'), { recursive: true })
+  await fs.mkdir(path.join(archivePath, 'messages'), { recursive: true })
+
+  // Initialize git repo inside archive/
+  execSync('git init', { cwd: archivePath })
+  execSync('git config user.email "test@example.com"', { cwd: archivePath })
+  execSync('git config user.name "Test User"', { cwd: archivePath })
 
   // Create sample folder state file with messages
   const inboxState = {
+    folderPath: 'INBOX',
     uidvalidity: '1234567890',
     uidnext: 6,
     messages: [
@@ -37,7 +50,7 @@ beforeAll(async () => {
     ],
   }
   await fs.writeFile(
-    path.join(tmpRepo, 'folders', 'INBOX.json'),
+    path.join(archivePath, 'folders', 'INBOX.json'),
     JSON.stringify(inboxState)
   )
 
@@ -67,38 +80,24 @@ Message-ID: <msg3@example.com>
 This is the body of the third email.`
 
   await fs.writeFile(
-    path.join(tmpRepo, 'messages', `${sanitizeMessageId('<msg1@example.com>')}.eml`),
+    path.join(archivePath, 'messages', `${sanitizeMessageId('<msg1@example.com>')}.eml`),
     eml1
   )
   await fs.writeFile(
-    path.join(tmpRepo, 'messages', `${sanitizeMessageId('<msg2@example.com>')}.eml`),
+    path.join(archivePath, 'messages', `${sanitizeMessageId('<msg2@example.com>')}.eml`),
     eml2
   )
   await fs.writeFile(
-    path.join(tmpRepo, 'messages', `${sanitizeMessageId('<msg3@example.com>')}.eml`),
+    path.join(archivePath, 'messages', `${sanitizeMessageId('<msg3@example.com>')}.eml`),
     eml3
   )
 
-  // Create initial commit
-  execSync('touch README.md', { cwd: tmpRepo })
-  execSync('git add -A', { cwd: tmpRepo })
-  execSync('git commit -m "Initial CLI restore test repo"', { cwd: tmpRepo })
+  // Create initial commit inside archive/
+  execSync('touch README.md', { cwd: archivePath })
+  execSync('git add -A', { cwd: archivePath })
+  execSync('git commit -m "Initial CLI restore test repo"', { cwd: archivePath })
 
-  // Create config file for test
-  await fs.mkdir(configDir, { recursive: true })
   configFile = path.join(configDir, 'config.json')
-  const config = {
-    accounts: {
-      test: {
-        host: 'localhost',
-        port: 143,
-        username: 'testuser',
-        tls: false,
-        repoPath: tmpRepo,
-      },
-    },
-  }
-  await fs.writeFile(configFile, JSON.stringify(config))
 })
 
 afterAll(async () => {
@@ -236,7 +235,12 @@ describe('CLI: error handling', () => {
 
 describe('CLI: restore output formatting', () => {
   it('Output shows total summary line on success', async () => {
-    const { stdout, stderr } = executeBackmail(['restore', '--to', 'imap://user:pass@localhost:143', '--dry-run'], { HOME: tmpDir })
+    // --workdir points to the repo root (containing .backmail/ and archive/)
+    // --skip-duplicates=no avoids opening an IMAP connection in dry-run mode
+    const { stdout, stderr } = executeBackmail(
+      ['--workdir', tmpRepo, 'restore', '--to', 'imap://user:pass@localhost:143', '--dry-run', '--skip-duplicates=no'],
+      { HOME: tmpDir }
+    )
 
     // Output should have a summary line with totals
     const output = stdout + stderr

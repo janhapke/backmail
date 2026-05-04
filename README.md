@@ -318,7 +318,51 @@ npm run test:watch            # watch mode
 npm run test:integration      # integration tests against a local Dovecot container
 ```
 
-Integration tests require Docker. The test runner starts a [minimal-imap](https://github.com/gmitirol/minimal-imap) Dovecot container automatically.
+---
+
+### Integration Tests
+
+#### Prerequisites
+
+- **Docker** — the test runner starts and stops containers automatically. No manual IMAP setup needed.
+
+#### How to run
+
+```sh
+npm run test:integration
+```
+
+This script ([scripts/test-integration.sh](scripts/test-integration.sh)):
+
+1. Runs `docker compose up -d` to start three containers:
+   - `imap-source` — Dovecot IMAP server acting as the source mailbox
+   - `imap-target` — Dovecot IMAP server acting as the restore target
+   - `mail-seeder` — seeds fixture messages into the source on startup
+2. Waits for the IMAP port (143) to accept connections
+3. Runs Vitest with `vitest.integration.config.ts` (120 s per-test timeout)
+4. Tears down all containers on exit, even if tests fail
+
+You can override the connection defaults with environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `IMAP_HOST` | `localhost` | IMAP server hostname |
+| `IMAP_PORT` | `143` | IMAP port |
+| `IMAP_USER` | `testuser` | IMAP login |
+| `IMAP_PASS` | `testpass` | IMAP password |
+
+#### What the tests cover
+
+| File | IDs | What it tests |
+|------|-----|---------------|
+| `imap-connect.test.ts` | — | Raw IMAP connectivity to both source and target containers |
+| `sync.test.ts` | SYNC-01, SYNC-03, SYNC-05 | Full sync cycle: fetching messages, writing `.eml` files, folder JSON state, deletion mirroring, uidvalidity change |
+| `restore-sync.test.ts` | REST-01 – REST-04 | Uploading a local archive to a target IMAP server, duplicate skipping, dry-run mode, folder creation |
+| `browse.test.ts` | — | Listing folders, listing messages, viewing message content from a local git archive |
+| `cli-browse.test.ts` | — | End-to-end CLI (`backmail ls`, `backmail view`, `backmail log`, `backmail checkout`) via `spawnSync` |
+| `cli-restore.test.ts` | — | End-to-end CLI (`backmail restore`) argument validation, URL parsing, dry-run output format |
+
+Each `beforeAll` seeds the IMAP server or creates a temporary git repo in `os.tmpdir()`. Each `afterAll` deletes the temp directory and resets any env vars set during the test.
 
 ### Type checking
 

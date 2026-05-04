@@ -108,12 +108,12 @@ describe('REST-01: Message upload from local checkout to target', () => {
       port: IMAP_PORT,
       username: IMAP_USER,
       tls: false,
-      repoPath: tmpRepo,
+      passwordRef: 'env:BACKMAIL_TEST_PASSWORD',
     }
 
     const targetUrl = `imap://${IMAP_USER}:${IMAP_PASS}@${IMAP_HOST}:${IMAP_PORT}`
 
-    const result = await restoreAccount(accountConfig, targetUrl, undefined, {
+    const result = await restoreAccount(accountConfig, tmpRepo, targetUrl, undefined, {
       skipDuplicates: false,
       dryRun: false,
       verbose: false,
@@ -145,6 +145,27 @@ describe('REST-01: Message upload from local checkout to target', () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe('REST-02: Duplicate checking with --skip-duplicates=yes', () => {
+  beforeAll(async () => {
+    // REST-01 already uploaded all 3 messages; purge INBOX so duplicate tests start clean
+    const cleaner = new ImapFlow({
+      host: IMAP_HOST,
+      port: IMAP_PORT,
+      secure: false,
+      auth: { user: IMAP_USER, pass: IMAP_PASS },
+      logger: false,
+    })
+    await cleaner.connect()
+    const lock = await cleaner.getMailboxLock('INBOX')
+    try {
+      await cleaner.messageDelete('1:*', { uid: false })
+    } catch {
+      // INBOX may already be empty
+    } finally {
+      lock.release()
+    }
+    await cleaner.logout().catch(() => {})
+  })
+
   it('With skip-duplicates=yes, messages with duplicate Message-ID are skipped', async () => {
     // First, seed the target with one duplicate message
     const seeder = new ImapFlow({
@@ -167,12 +188,12 @@ describe('REST-02: Duplicate checking with --skip-duplicates=yes', () => {
       port: IMAP_PORT,
       username: IMAP_USER,
       tls: false,
-      repoPath: tmpRepo,
+      passwordRef: 'env:BACKMAIL_TEST_PASSWORD',
     }
 
     const targetUrl = `imap://${IMAP_USER}:${IMAP_PASS}@${IMAP_HOST}:${IMAP_PORT}`
 
-    const result = await restoreAccount(accountConfig, targetUrl, undefined, {
+    const result = await restoreAccount(accountConfig, tmpRepo, targetUrl, undefined, {
       skipDuplicates: true,
       dryRun: false,
       verbose: false,
@@ -188,12 +209,12 @@ describe('REST-02: Duplicate checking with --skip-duplicates=yes', () => {
       port: IMAP_PORT,
       username: IMAP_USER,
       tls: false,
-      repoPath: tmpRepo,
+      passwordRef: 'env:BACKMAIL_TEST_PASSWORD',
     }
 
     const targetUrl = `imap://${IMAP_USER}:${IMAP_PASS}@${IMAP_HOST}:${IMAP_PORT}`
 
-    const result = await restoreAccount(accountConfig, targetUrl, undefined, {
+    const result = await restoreAccount(accountConfig, tmpRepo, targetUrl, undefined, {
       skipDuplicates: false,
       dryRun: false,
       verbose: false,
@@ -215,7 +236,7 @@ describe('REST-03: Dry-run produces output without writing', () => {
       port: IMAP_PORT,
       username: IMAP_USER,
       tls: false,
-      repoPath: tmpRepo,
+      passwordRef: 'env:BACKMAIL_TEST_PASSWORD',
     }
 
     const targetUrl = `imap://${IMAP_USER}:${IMAP_PASS}@${IMAP_HOST}:${IMAP_PORT}`
@@ -237,7 +258,7 @@ describe('REST-03: Dry-run produces output without writing', () => {
     const countBeforeLength = countBefore !== false ? countBefore.length : 0
 
     // Perform dry-run
-    const result = await restoreAccount(accountConfig, targetUrl, undefined, {
+    const result = await restoreAccount(accountConfig, tmpRepo, targetUrl, undefined, {
       skipDuplicates: false,
       dryRun: true,
       verbose: false,
@@ -269,12 +290,12 @@ describe('REST-03: Dry-run produces output without writing', () => {
       port: IMAP_PORT,
       username: IMAP_USER,
       tls: false,
-      repoPath: tmpRepo,
+      passwordRef: 'env:BACKMAIL_TEST_PASSWORD',
     }
 
     const targetUrl = `imap://${IMAP_USER}:${IMAP_PASS}@${IMAP_HOST}:${IMAP_PORT}`
 
-    const result = await restoreAccount(accountConfig, targetUrl, undefined, {
+    const result = await restoreAccount(accountConfig, tmpRepo, targetUrl, undefined, {
       skipDuplicates: false,
       dryRun: true,
       verbose: true,
@@ -295,12 +316,12 @@ describe('REST-04: Folder structure preserved on target', () => {
       port: IMAP_PORT,
       username: IMAP_USER,
       tls: false,
-      repoPath: tmpRepo,
+      passwordRef: 'env:BACKMAIL_TEST_PASSWORD',
     }
 
     const targetUrl = `imap://${IMAP_USER}:${IMAP_PASS}@${IMAP_HOST}:${IMAP_PORT}`
 
-    const result = await restoreAccount(accountConfig, targetUrl, undefined, {
+    const result = await restoreAccount(accountConfig, tmpRepo, targetUrl, undefined, {
       skipDuplicates: false,
       dryRun: false,
       verbose: false,
@@ -334,12 +355,12 @@ describe('Error handling during restore', () => {
       port: IMAP_PORT,
       username: IMAP_USER,
       tls: false,
-      repoPath: tmpRepo,
+      passwordRef: 'env:BACKMAIL_TEST_PASSWORD',
     }
 
     const targetUrl = `imap://${IMAP_USER}:${IMAP_PASS}@${IMAP_HOST}:${IMAP_PORT}`
 
-    const result = await restoreAccount(accountConfig, targetUrl, undefined, {
+    const result = await restoreAccount(accountConfig, tmpRepo, targetUrl, undefined, {
       skipDuplicates: false,
       dryRun: false,
       verbose: false,
@@ -359,7 +380,7 @@ describe('Error handling during restore', () => {
       port: IMAP_PORT,
       username: IMAP_USER,
       tls: false,
-      repoPath: tmpRepo,
+      passwordRef: 'env:BACKMAIL_TEST_PASSWORD',
     }
 
     const targetUrl = `imap://${IMAP_USER}:${IMAP_PASS}@${IMAP_HOST}:${IMAP_PORT}`
@@ -367,7 +388,7 @@ describe('Error handling during restore', () => {
     // Get the initial commit hash
     const commitHash = execSync('git rev-parse HEAD', { cwd: tmpRepo }).toString().trim()
 
-    const result = await restoreAccount(accountConfig, targetUrl, commitHash, {
+    const result = await restoreAccount(accountConfig, tmpRepo, targetUrl, commitHash, {
       skipDuplicates: false,
       dryRun: false,
       verbose: false,
