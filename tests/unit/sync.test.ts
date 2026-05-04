@@ -2,9 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs'
+import { ImapFlow } from 'imapflow'
 
-// Subject under test — these imports WILL FAIL until Plan 2 creates sync.ts
-// That is the intended RED state for this Wave 0 task.
 import {
   syncAccount,
   sanitizeMessageId,
@@ -197,5 +196,98 @@ describe('ensureRepo — D-04 auto git init (tmp dir)', () => {
   it.skip('Test S: would mock simple-git checkIsRepo → false, then assert git.init() called', () => {
     // This test is deferred to Plan 2 when the full mock harness is built
     // TODO: D-04 — enable this test in Plan 2 after syncAccount integration is complete
+  })
+})
+
+// ---------------------------------------------------------------------------
+// SYNC-01: uidNext guard — prevents re-fetching last message when up to date
+// RFC 3501: a UID range N:* resolves to the last message when N > max UID,
+// so we must skip the fetch entirely when lastUid+1 >= serverUidNext.
+// ---------------------------------------------------------------------------
+
+describe('SYNC-01: uidNext guard', () => {
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backmail-uidnext-'))
+    fs.mkdirSync(path.join(tmpDir, 'folders'), { recursive: true })
+    fs.mkdirSync(path.join(tmpDir, 'messages'), { recursive: true })
+  })
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('Test T: does not call fetch when lastUid+1 equals uidNext (no new messages)', async () => {
+    const storedState = {
+      folderPath: 'INBOX',
+      uidvalidity: '1',
+      uidnext: 6,
+      messages: [{ uid: 5, 'message-id': '<existing@example.com>', flags: [] }],
+    }
+    fs.writeFileSync(path.join(tmpDir, 'folders', 'INBOX.json'), JSON.stringify(storedState))
+    fs.writeFileSync(path.join(tmpDir, 'messages', 'existing@example.com.eml'), 'dummy')
+
+    const fetchMock = vi.fn().mockImplementation(async function* () {})
+    vi.mocked(ImapFlow).mockImplementationOnce(function () {
+      return {
+        connect: vi.fn().mockResolvedValue(undefined),
+        logout: vi.fn().mockResolvedValue(undefined),
+        list: vi.fn().mockResolvedValue([{ path: 'INBOX', delimiter: '/', flags: new Set() }]),
+        getMailboxLock: vi.fn().mockResolvedValue({ release: vi.fn() }),
+        fetch: fetchMock,
+        search: vi.fn().mockResolvedValue([5]),
+        mailbox: { uidValidity: 1n, uidNext: 6 },
+      }
+    } as any)
+
+    const result = await syncAccount(
+      { host: 'localhost', port: 993, username: 'u', tls: true, passwordRef: 'keyring:service=test;account=test' },
+      tmpDir,
+      { excludeFolders: [], onlyFolders: [], verbose: false },
+    )
+
+    expect(result.added).toBe(0)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('Test U: calls fetch when uidNext is greater than lastUid+1 (new messages exist)', async () => {
+    const storedState = {
+      folderPath: 'INBOX',
+      uidvalidity: '1',
+      uidnext: 6,
+      messages: [{ uid: 5, 'message-id': '<existing@example.com>', flags: [] }],
+    }
+    fs.writeFileSync(path.join(tmpDir, 'folders', 'INBOX.json'), JSON.stringify(storedState))
+    fs.writeFileSync(path.join(tmpDir, 'messages', 'existing@example.com.eml'), 'dummy')
+
+    const fetchMock = vi.fn().mockImplementation(async function* () {
+      yield {
+        uid: 6,
+        envelope: { messageId: '<new@example.com>' },
+        source: Buffer.from('new mail content'),
+        flags: new Set<string>(),
+      }
+    })
+    vi.mocked(ImapFlow).mockImplementationOnce(function () {
+      return {
+        connect: vi.fn().mockResolvedValue(undefined),
+        logout: vi.fn().mockResolvedValue(undefined),
+        list: vi.fn().mockResolvedValue([{ path: 'INBOX', delimiter: '/', flags: new Set() }]),
+        getMailboxLock: vi.fn().mockResolvedValue({ release: vi.fn() }),
+        fetch: fetchMock,
+        search: vi.fn().mockResolvedValue([5, 6]),
+        mailbox: { uidValidity: 1n, uidNext: 8 },
+      }
+    } as any)
+
+    const result = await syncAccount(
+      { host: 'localhost', port: 993, username: 'u', tls: true, passwordRef: 'keyring:service=test;account=test' },
+      tmpDir,
+      { excludeFolders: [], onlyFolders: [], verbose: false },
+    )
+
+    expect(result.added).toBe(1)
+    expect(fetchMock).toHaveBeenCalledOnce()
   })
 })

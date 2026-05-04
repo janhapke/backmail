@@ -307,11 +307,16 @@ async function syncFolder(
     const lastUid = storedState && storedState.messages.length > 0
       ? Math.max(...storedState.messages.map((m) => m.uid ?? 0))
       : 0
+
+    // When lastUid+1 >= uidNext there are no new messages. Without this guard,
+    // IMAP resolves `lastUid+1:*` to the last existing message (RFC 3501: *
+    // always anchors to the highest UID), causing the last mail to be re-added.
+    const hasNewMessages = lastUid === 0 || lastUid + 1 < serverUidNext
     const range = lastUid === 0 ? '1:*' : `${lastUid + 1}:*`
 
     // Fetch new messages
     const newMessages: FolderMessage[] = []
-    for await (const msg of client.fetch(range, { uid: true, source: true, envelope: true, flags: true }, { uid: true })) {
+    if (hasNewMessages) for await (const msg of client.fetch(range, { uid: true, source: true, envelope: true, flags: true }, { uid: true })) {
       const rawId = msg.envelope?.messageId ?? `no-message-id_uid-${msg.uid}_${folderFilename}`
       const safeId = sanitizeMessageId(rawId)
       const msgPath = path.join(repoPath, 'messages', `${safeId}.eml`)
