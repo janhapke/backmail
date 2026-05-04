@@ -1,27 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import { filterFolders } from '../../src/core/sync.js'
-import type { BackmailConfig, AccountConfig } from '../../src/core/index.js'
-
-describe('SYNC-06: --all multi-account iteration semantics', () => {
-  it('Object.keys(config.accounts) yields all configured account names in insertion order', () => {
-    const mkAccount = (host: string): AccountConfig => ({
-      host, port: 993, username: 'u', tls: true, repoPath: '/tmp/r',
-    })
-    const config: BackmailConfig = {
-      accounts: {
-        alpha: mkAccount('a.example.com'),
-        bravo: mkAccount('b.example.com'),
-        charlie: mkAccount('c.example.com'),
-      },
-    }
-    expect(Object.keys(config.accounts)).toEqual(['alpha', 'bravo', 'charlie'])
-  })
-
-  it('Empty accounts map reports length 0 (triggers "No accounts configured" path)', () => {
-    const config: BackmailConfig = { accounts: {} }
-    expect(Object.keys(config.accounts).length).toBe(0)
-  })
-})
 
 describe('D-02 + D-03: folder filter semantics', () => {
   const mkFolder = (path: string, flags: string[] = []) => ({
