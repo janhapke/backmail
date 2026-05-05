@@ -12,7 +12,7 @@ Built AI-first with [GSD](https://github.com/gsd-build/get-shit-done/) and [Clau
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 20+
 - Git
 
 ### Install
