@@ -4,6 +4,8 @@ Backup Mail to git. Browse, search, and restore email at any point in history wi
 
 Each backmail repository tracks one IMAP account. Messages are stored as `.eml` files named by Message-ID, so identical messages (e.g. Gmail labels) are deduplicated at the git level. Every sync run produces a commit with a `+added / -removed` summary. Deletions are mirrored — if you remove a message from your mailbox, the next sync removes it from the repo (git history still has it).
 
+Built AI-first with [GSD](https://github.com/gsd-build/get-shit-done/) and [Claude Code](https://claude.com/product/claude-code).
+
 ---
 
 ## Getting Started
