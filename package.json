@@ -1,7 +1,7 @@
 {
   "name": "backmail",
   "version": "0.1.0",
-  "description": "Mirror IMAP mailboxes to git",
+  "description": "Backup mail to git",
   "type": "module",
   "bin": {
     "backmail": "./dist/cli/index.js"
