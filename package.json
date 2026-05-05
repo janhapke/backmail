@@ -19,6 +19,14 @@
   "bugs": {
     "url": "https://github.com/janhapke/backmail/issues"
   },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
   "type": "module",
   "bin": {
     "backmail": "./dist/cli/index.js"
