@@ -2,7 +2,13 @@
   "name": "backmail",
   "version": "0.1.0",
   "description": "Backup mail to git",
-  "keywords": ["imap", "email", "backup", "git", "cli"],
+  "keywords": [
+    "imap",
+    "email",
+    "backup",
+    "git",
+    "cli"
+  ],
   "author": "Jan Hapke",
   "license": "MIT",
   "homepage": "https://github.com/janhapke/backmail#readme",
@@ -32,7 +38,7 @@
     "imap:clear": "tsx scripts/clear-imap.ts"
   },
   "devDependencies": {
-    "@types/mailparser": "^2.7.4",
+    "@types/mailparser": "^3.4.6",
     "@types/node": "25.6.0",
     "@vitest/coverage-v8": "^4.1.4",
     "tsx": "4.21.0",
