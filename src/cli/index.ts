@@ -6,7 +6,10 @@
 //   - process.exit() and console are acceptable here (this IS the CLI layer)
 
 import { Command } from 'commander'
+import { createRequire } from 'node:module'
 import path from 'node:path'
+
+const { version } = (createRequire(import.meta.url))('../../package.json') as { version: string }
 import { loadRepositoryConfig, findRepository } from '../core/index.js'
 import type { RepositoryConfig } from '../core/index.js'
 import { input, confirm, password as promptPassword } from '@inquirer/prompts'
@@ -19,7 +22,7 @@ const program = new Command()
 program
   .name('backmail')
   .description('Backup Mail to git')
-  .version('0.1.0')
+  .version(version)
   .option('--workdir <path>', 'path to backmail repository (default: auto-detect from CWD)')
 
 function getRepoRoot(): string {
