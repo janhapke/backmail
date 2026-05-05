@@ -1,8 +1,4 @@
-// src/core/sync.ts — SYNC-01 through SYNC-05
-// ARCH-01: no exit calls, no console.*, no CLI imports
-// Threat mitigations: T-3-01 (Message-ID sanitization),
-//                     T-3-02 (folder-path sanitization),
-//                     T-3-03 (logger: false in ImapFlow constructor)
+// src/core/sync.ts — no exit calls, no console, no CLI imports.
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { ImapFlow } from 'imapflow'
@@ -51,7 +47,7 @@ interface FolderState {
 // ── Helper Functions ─────────────────────────────────────────────────────────
 
 /**
- * T-3-01: Sanitize Message-ID to make it filesystem-safe
+ * Sanitize Message-ID to make it filesystem-safe.
  * - Strip angle brackets
  * - Replace unsafe characters with underscore
  * - Replace .. with __ (prevent relative path traversal)
@@ -71,7 +67,7 @@ export function sanitizeMessageId(messageId: string): string {
 }
 
 /**
- * T-3-02: Sanitize IMAP folder path to make it filesystem-safe
+ * Sanitize IMAP folder path to make it filesystem-safe.
  * - Replace unsafe characters with underscore
  * - Replace .. with __ (prevent relative path traversal)
  */
@@ -85,8 +81,8 @@ export function folderPathToFilename(imapPath: string): string {
 }
 
 /**
- * SYNC-02, D-07, D-08: Format commit message for sync
- * Normal: YYYY-MM-DD: +N added / -N removed
+ * Format the git commit message for a sync run.
+ * Normal:  YYYY-MM-DD: +N added / -N removed
  * Partial: YYYY-MM-DD [partial]: +N added / -N removed
  */
 export function formatCommitMessage(
@@ -104,7 +100,7 @@ export function formatCommitMessage(
 }
 
 /**
- * D-02, D-03: Filter mailboxes by \Noselect flag and folder name filters
+ * Filter mailboxes by \Noselect flag and folder name filters.
  * Rules:
  * - Always drop folders with \Noselect flag
  * - If onlyFolders non-empty: keep folders matching by full path OR leaf name
@@ -147,7 +143,7 @@ export function filterFolders<T extends { path: string; delimiter: string; flags
 }
 
 /**
- * D-04: Ensure a directory is a git repository.
+ * Ensure a directory is a git repository.
  * If not, initialize it. Returns true if repo was just initialized.
  */
 export async function ensureRepo(repoPath: string): Promise<boolean> {
@@ -173,7 +169,6 @@ export async function syncAccount(
     throw new Error('--only-folder and --exclude-folder are mutually exclusive')
   }
 
-  // Get password via passwordRef (CRED-01)
   const password = await getPasswordByRef(config.passwordRef)
 
   // Ensure repository exists
@@ -282,9 +277,9 @@ async function syncFolder(
     const serverValidity = client.mailbox.uidValidity ?? 0n // Fallback if undefined
     const serverUidNext = client.mailbox.uidNext ?? 0
 
-    // Check for uidvalidity change (SYNC-05): triggers full re-sync
+    // uidvalidity change triggers a full re-sync of the folder
     if (storedState) {
-      // uidvalidity is already stored as a string in JSON schema — compare as strings (T-4-01 CR-01 fix)
+      // Compare as strings — BigInt doesn't round-trip through JSON
       const storedValidityStr = storedState.uidvalidity
       const serverValidityStr = serverValidity.toString()
       if (storedValidityStr !== serverValidityStr) {
@@ -303,7 +298,7 @@ async function syncFolder(
       }
     }
 
-    // Calculate fetch range (SYNC-01): fetch only new messages
+    // Fetch only new messages by starting from the highest known UID
     const lastUid = storedState && storedState.messages.length > 0
       ? Math.max(...storedState.messages.map((m) => m.uid ?? 0))
       : 0
@@ -335,7 +330,7 @@ async function syncFolder(
       added++
     }
 
-    // Detect deletions (SYNC-03): compare current UIDs against stored
+    // Detect deletions by comparing current server UIDs against stored state
     const searchResult = await client.search({ all: true }, { uid: true })
     const currentUids = new Set(Array.isArray(searchResult) ? searchResult : [])
     const existingMessages = storedState?.messages ?? []

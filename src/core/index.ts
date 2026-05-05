@@ -1,5 +1,5 @@
 // src/core/index.ts — public API boundary
-// No process.exit, no console.*, no CLI imports.
+// Must be importable without CLI context: no exit calls, no console, no CLI imports.
 // All relative imports must use .js extension (nodenext moduleResolution).
 
 // Repository config

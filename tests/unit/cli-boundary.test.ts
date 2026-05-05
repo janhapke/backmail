@@ -11,7 +11,7 @@ describe('ARCH-02: cli/core module boundary enforcement', () => {
       resolve(__dirname, '../../src/core/index.ts'),
       'utf-8'
     )
-    // Core must never import from cli — this breaks the eimerjs IPC boundary
+    // Core must never import from cli — enforced by this test
     expect(coreSource).not.toMatch(/from ['"]\.\.\/cli\//)
     expect(coreSource).not.toMatch(/from ['"].*\/cli\//)
     expect(coreSource).not.toMatch(/require\(.*cli/)
@@ -108,7 +108,7 @@ describe('ARCH-01: src/core/sync.ts module boundary enforcement', () => {
     expect(syncSource).not.toMatch(/console\.(log|error|warn|info|debug)/)
   })
 
-  it('src/core/sync.ts sets logger: false on ImapFlow (T-3-03)', () => {
+  it('src/core/sync.ts sets logger: false on ImapFlow', () => {
     const syncSource = readFileSync(
       resolve(__dirname, '../../src/core/sync.ts'),
       'utf-8'

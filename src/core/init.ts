@@ -1,5 +1,4 @@
-// src/core/init.ts — REPO-01 through REPO-04
-// ARCH-01: no exit calls, no console.*, no CLI imports
+// src/core/init.ts — no exit calls, no console, no CLI imports.
 import fs from 'node:fs'
 import path from 'node:path'
 import { simpleGit } from 'simple-git'
@@ -12,7 +11,7 @@ export async function initRepository(
 ): Promise<void> {
   const backmailDir = path.join(targetDir, '.backmail')
 
-  // REPO-04: non-destructive guard — .backmail/ presence is the repo marker
+  // Non-destructive guard — .backmail/ presence is the repo marker
   if (fs.existsSync(backmailDir)) {
     throw new Error(
       `Repository already exists at ${targetDir}. Remove .backmail/ to reinitialize.`,
@@ -23,7 +22,7 @@ export async function initRepository(
   const worktreesPath = path.join(targetDir, 'worktrees')
 
   // Create archive/ and worktrees/ BEFORE .backmail/ so that if git init fails,
-  // .backmail/ is never created and the user can re-run init without hitting REPO-04 guard.
+  // .backmail/ is never created, so the user can safely re-run init.
   fs.mkdirSync(archivePath, { recursive: true })
   fs.mkdirSync(worktreesPath, { recursive: true })
 

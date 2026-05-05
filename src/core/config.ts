@@ -1,5 +1,4 @@
-// src/core/config.ts — CRED-01, CRED-02, CRED-03
-// ARCH-01: no exit calls, no console.*, no CLI imports
+// src/core/config.ts — no exit calls, no console, no CLI imports.
 import * as z from 'zod'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -53,7 +52,7 @@ export function loadRepositoryConfig(repoRoot: string): RepositoryConfig {
   return RepositoryConfigSchema.parse(parsed) as RepositoryConfig
 }
 
-// ── passwordRef parser (D-04, D-05) ──────────────────────────────────────────
+// ── passwordRef parser ────────────────────────────────────────────────────────
 
 export function parsePasswordRef(ref: string): PasswordRef {
   if (ref.startsWith('keyring:')) {
@@ -79,7 +78,7 @@ export function parsePasswordRef(ref: string): PasswordRef {
   )
 }
 
-// ── Credential resolver (D-03) ────────────────────────────────────────────────
+// ── Credential resolver ───────────────────────────────────────────────────────
 
 export async function getPasswordByRef(passwordRef: string): Promise<string> {
   const parsed = parsePasswordRef(passwordRef)
@@ -116,7 +115,7 @@ export async function getPasswordByRef(passwordRef: string): Promise<string> {
 
   if (resolvedPassword !== null) return resolvedPassword
 
-  // D-03: top-level BACKMAIL_PASSWORD env var fallback
+  // Universal fallback: BACKMAIL_PASSWORD env var
   const fallback = process.env.BACKMAIL_PASSWORD
   if (fallback) return fallback
 

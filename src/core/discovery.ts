@@ -1,5 +1,4 @@
-// src/core/discovery.ts — DISC-01, DISC-02, DISC-03
-// ARCH-01: no exit calls, no console.*, no CLI imports
+// src/core/discovery.ts — no exit calls, no console, no CLI imports.
 // Walk up filesystem to find .backmail/ directory marker.
 import fs from 'node:fs'
 import path from 'node:path'
@@ -10,8 +9,8 @@ import path from 'node:path'
  * or null if not found before reaching the filesystem root.
  *
  * Pure function — no side effects, no I/O other than fs.existsSync.
- * Stops at filesystem root (path.parse(p).root). No git-root boundary check (D-02).
- * Detection criterion: .backmail/ directory presence (D-03).
+ * Stops at filesystem root (path.parse(p).root).
+ * Detection criterion: .backmail/ directory presence.
  */
 export function findRepository(startDir: string): string | null {
   let current = path.resolve(startDir)

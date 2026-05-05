@@ -1,7 +1,5 @@
-// src/core/browse.ts — Phase 4: Browse Commands
-// ARCH-01: public API boundary — no exit calls, no console.*, no CLI imports
-// T-4-02: Path traversal protection via sanitizeMessageId before filesystem lookup
-// This module implements read-only browse commands for synced mail archives
+// src/core/browse.ts — no exit calls, no console, no CLI imports.
+// Read-only browse commands for synced mail archives.
 
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -47,7 +45,7 @@ async function resolveDate(repoPath: string, dateStr: string): Promise<string> {
   return log.latest!.hash
 }
 
-// ── Browse Functions (Implementation for Phase 04-02) ──────────────────────
+// ── Browse Functions ────────────────────────────────────────────────────────
 
 /**
  * Get sync commit log for the mailbox.
@@ -260,7 +258,7 @@ export async function viewMessage(
   messageId: string,
   format: 'eml' | 'plaintext' | 'json' = 'plaintext'
 ): Promise<string | Record<string, unknown>> {
-  // Sanitize messageId before constructing path (T-4-02 threat mitigation)
+  // Sanitize before constructing path to prevent directory traversal
   const sanitized = sanitizeMessageId(messageId)
   const emlPath = path.join(repoPath, 'messages', `${sanitized}.eml`)
 

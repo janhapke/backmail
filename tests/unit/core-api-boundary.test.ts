@@ -18,20 +18,9 @@ describe('ARCH-01: core module API boundary', () => {
     expect(config.passwordRef).toBe('env:BACKMAIL_PASSWORD')
   })
 
-  it('exports ping as a function', () => {
-    expect(typeof core.ping).toBe('function')
-  })
-
-  it('ping returns a Promise (async function)', () => {
-    // ping throws 'Not implemented' in Phase 1 — we only check it returns a Promise
-    const result = core.ping({})
-    expect(result).toBeInstanceOf(Promise)
-    // Suppress unhandled rejection from the stub
-    result.catch(() => {})
-  })
 })
 
-describe('Phase 3: sync public API surface', () => {
+describe('sync public API surface', () => {
   it('exports syncAccount as a function', () => {
     expect(typeof core.syncAccount).toBe('function')
   })
@@ -68,7 +57,7 @@ describe('Phase 3: sync public API surface', () => {
   })
 })
 
-describe('Phase 6: credential infrastructure public API surface', () => {
+describe('credential infrastructure public API surface', () => {
   it('exports loadRepositoryConfig as a function', () => {
     expect(typeof core.loadRepositoryConfig).toBe('function')
   })

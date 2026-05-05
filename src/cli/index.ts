@@ -22,13 +22,11 @@ program
   .version('0.1.0')
   .option('--workdir <path>', 'path to backmail repository (default: auto-detect from CWD)')
 
-// Helper to discover and validate the repository root (per D-07, D-05)
 function getRepoRoot(): string {
   const opts = program.opts() as { workdir?: string }
   const startDir = opts.workdir ? path.resolve(opts.workdir) : process.cwd()
   const repoRoot = findRepository(startDir)
   if (!repoRoot) {
-    // D-06: exact two-line error, no CWD path, exit 1
     console.error(
       'Error: Not inside a backmail repository.\n' +
       'Use `backmail init` to create one, or `--workdir <path>` to specify a path.'
@@ -38,7 +36,6 @@ function getRepoRoot(): string {
   return repoRoot
 }
 
-// ── Phase 3+ imports ────────────────────────────────────────────────────────
 import { syncAccount, getLog, checkoutCommit, listFolders, listMessages, viewMessage, restoreAccount } from '../core/index.js'
 
 function getErrorMessage(err: unknown): string {
@@ -63,7 +60,6 @@ program
   .option('--only-folder <name>', 'restrict to this folder (repeatable)', collectRepeatable, [])
   .option('--verbose', 'log one line per folder and per message')
   .action(async (opts: { excludeFolder: string[]; onlyFolder: string[]; verbose?: boolean }) => {
-    // D-02: --exclude-folder and --only-folder are mutually exclusive
     if (opts.excludeFolder.length > 0 && opts.onlyFolder.length > 0) {
       console.error('Error: --exclude-folder and --only-folder are mutually exclusive')
       process.exit(1)
@@ -83,7 +79,6 @@ program
       if (result.repoInitialized) {
         console.log(`Initialized git repo at ${archivePath}`)
       }
-      // D-05 summary format; D-08 partial marker
       const partialTag = result.partial ? ' [partial]' : ''
       console.log(`sync${partialTag}: +${result.added} added / -${result.removed} removed`)
       // Per-folder error surfacing (verbose or error-only)
@@ -104,7 +99,7 @@ program
     }
   })
 
-// ── Phase 4: log subcommand ─────────────────────────────────────────────────
+// ── log ─────────────────────────────────────────────────────────────────────
 program
   .command('log')
   .description('Show git commit history')
@@ -124,7 +119,7 @@ program
     }
   })
 
-// ── Phase 4: checkout subcommand ─────────────────────────────────────────────
+// ── checkout ─────────────────────────────────────────────────────────────────
 program
   .command('checkout <date|commit>')
   .description('Create a git worktree at a point in history')
@@ -141,7 +136,7 @@ program
     }
   })
 
-// ── Phase 4: ls subcommand ──────────────────────────────────────────────────
+// ── ls ──────────────────────────────────────────────────────────────────────
 program
   .command('ls [folder]')
   .description('List folders or messages in a folder')
@@ -168,7 +163,7 @@ program
     }
   })
 
-// ── Phase 4: view subcommand ────────────────────────────────────────────────
+// ── view ────────────────────────────────────────────────────────────────────
 program
   .command('view <message-id>')
   .description('View an email message')
@@ -190,7 +185,7 @@ program
     }
   })
 
-// ── Phase 5: restore subcommand ─────────────────────────────────────────────
+// ── restore ─────────────────────────────────────────────────────────────────
 program
   .command('restore [date|commit]')
   .description('Restore messages from backup to target IMAP server')
@@ -209,12 +204,10 @@ program
       const archivePath = path.join(repoRoot, 'archive')
       const config = loadRepositoryConfig(repoRoot)
 
-      // Convert --skip-duplicates string to boolean (D-11)
       const skipDuplicates = opts.skipDuplicates === 'yes'
       const dryRun = opts.dryRun ?? false
       const verbose = opts.verbose ?? false
 
-      // Call core restoreAccount function
       const result = await restoreAccount(
         config,
         archivePath,
@@ -227,30 +220,27 @@ program
         }
       )
 
-      // Format and print output (D-14, D-15, D-16)
       const prefix = dryRun ? '[dry-run] ' : ''
       if (result.errors === 0) {
         console.log(
           `${prefix}Total: ${result.uploaded} uploaded, ${result.skipped} skipped`
         )
       } else {
-        // D-18: Include error count in summary
         console.log(
           `${prefix}Total: ${result.uploaded} uploaded, ${result.skipped} skipped, ${result.errors} errors`
         )
-        // D-19: Include retry hint
         console.error('Re-run with --skip-duplicates=yes to safely retry (already-uploaded messages will be skipped)')
         process.exit(1)
       }
     } catch (err) {
-      // D-19: Print error but never the URL with password (Pitfall 4, T-5-02)
+      // Sanitize to avoid leaking the password from the --to URL
       const msg = sanitizeErrorMessage(getErrorMessage(err))
       console.error(`Restore failed: ${msg}`)
       process.exit(1)
     }
   })
 
-// ── Phase 9: init command ────────────────────────────────────────────────────
+// ── init ────────────────────────────────────────────────────────────────────
 program
   .command('init [path]')
   .description('Create a new backmail repository')
@@ -274,7 +264,7 @@ program
   }) => {
     const targetDir = dirPath ? path.resolve(dirPath) : process.cwd()
 
-    // REPO-04: check before prompting — avoid collecting credentials for a repo that already exists
+    // Check before prompting — avoid collecting credentials for a repo that already exists
     if (fs.existsSync(path.join(targetDir, '.backmail'))) {
       console.error(`Repository already exists at ${targetDir}. Remove .backmail/ to reinitialize.`)
       process.exit(1)

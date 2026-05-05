@@ -1,7 +1,5 @@
-// src/core/restore.ts — REST-01 through REST-04
-// ARCH-01: no exit calls, no console.*, no CLI imports
-// Threat mitigations: T-5-01 (URL parsing validation),
-//                     T-5-02 (error message sanitization in CLI layer)
+// src/core/restore.ts — no exit calls, no CLI imports.
+// console.* is used for verbose per-message output.
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { ImapFlow } from 'imapflow'
@@ -12,28 +10,23 @@ import { checkoutCommit } from './browse.js'
 // ── Public Interfaces ────────────────────────────────────────────────────────
 
 export interface RestoreOptions {
-  skipDuplicates: boolean  // D-10, D-11: true = SEARCH first, false = upload all
-  dryRun: boolean          // D-12, D-13: true = no writes, output only
-  verbose: boolean         // D-15: true = per-message lines
+  skipDuplicates: boolean  // true = SEARCH before APPEND, false = upload all
+  dryRun: boolean          // true = no writes, output only
+  verbose: boolean         // true = per-message lines
 }
 
 export interface RestoreResult {
-  uploaded: number  // D-14: count of successfully appended messages
-  skipped: number   // D-10: count of messages skipped due to duplicate Message-ID
-  errors: number    // D-17, D-18: count of per-message errors
+  uploaded: number  // count of successfully appended messages
+  skipped: number   // count of messages skipped due to duplicate Message-ID
+  errors: number    // count of per-message errors
 }
 
 // ── Helper Functions ─────────────────────────────────────────────────────────
 
 /**
- * Parse IMAP URL into connection parameters.
- * Format: imap://user:pass@host:port or imaps://user:pass@host:port
- *
- * Implements:
- * - D-06, D-07: URL format parsing with TLS selection
- * - D-08: Credentials extraction and validation
- * - T-5-01: Safe URL parsing using Node.js URL constructor
- * - Pitfall 1: Default port selection (143 for imap://, 993 for imaps://)
+ * Parse an IMAP URL into connection parameters.
+ * Format: imap://user:pass@host[:port] or imaps://user:pass@host[:port]
+ * Default ports: 143 for imap://, 993 for imaps://
  */
 export function parseImapUrl(urlStr: string): {
   host: string
@@ -49,12 +42,10 @@ export function parseImapUrl(urlStr: string): {
     throw new Error(`Invalid URL: ${urlStr}`)
   }
 
-  // Validate protocol (D-07)
   if (url.protocol !== 'imap:' && url.protocol !== 'imaps:') {
     throw new Error(`URL protocol must be imap:// or imaps://, got: ${url.protocol}`)
   }
 
-  // Extract and validate credentials (D-06, D-08)
   if (!url.username) {
     throw new Error('URL must include username (format: imap://user:pass@host)')
   }
@@ -62,7 +53,6 @@ export function parseImapUrl(urlStr: string): {
     throw new Error('URL must include password (format: imap://user:pass@host)')
   }
 
-  // Determine TLS and default port (D-07, Pitfall 1)
   const secure = url.protocol === 'imaps:'
   const defaultPort = secure ? 993 : 143
   const port = url.port ? parseInt(url.port, 10) : defaultPort
@@ -77,12 +67,8 @@ export function parseImapUrl(urlStr: string): {
 }
 
 /**
- * Check if a message with the given Message-ID already exists in target folder.
- *
- * Implements:
- * - D-10, D-11: Duplicate checking via SEARCH command
- * - REST-02: Skip messages with duplicate Message-ID
- * - Pitfall 2: Always release mailbox lock in finally block
+ * Check if a message with the given Message-ID already exists in the target folder.
+ * Uses IMAP SEARCH so no download is needed.
  */
 export async function isDuplicate(
   client: ImapFlow,
@@ -91,33 +77,26 @@ export async function isDuplicate(
 ): Promise<boolean> {
   const lock = await client.getMailboxLock(folderPath)
   try {
-    // SEARCH for message with exact same Message-ID (D-10)
     const results = await client.search({
       header: { 'message-id': messageId }
     })
     return results !== false && results.length > 0
   } finally {
-    // ALWAYS release lock (Pitfall 2)
     await lock.release()
   }
 }
 
 /**
  * Create a folder on the target IMAP server if it doesn't exist.
- *
- * Implements:
- * - REST-04, D-09: Create missing folders before message upload
- * - Pitfall 5: Handle "already exists" errors gracefully
+ * Swallows "already exists" errors; re-throws others.
  */
 export async function createFolderIfNeeded(
   client: ImapFlow,
   folderPath: string
 ): Promise<void> {
   try {
-    // Try to create the folder (D-09)
     await client.mailboxCreate(folderPath)
   } catch (err) {
-    // Folder might already exist — check error message (Pitfall 5)
     const errMsg = (err as Error).message
     if (
       errMsg.includes('already exists') ||
@@ -135,15 +114,8 @@ export async function createFolderIfNeeded(
 // ── Main Function ────────────────────────────────────────────────────────────
 
 /**
- * Restore messages from a local git checkout to a target IMAP server.
- *
- * Implements all REST-01 through REST-04 requirements:
- * - REST-01: Upload messages from checkout to target IMAP server
- * - REST-02: Skip duplicates when skipDuplicates=true (via SEARCH)
- * - REST-03: Dry-run mode (suppress all writes)
- * - REST-04: Create missing folders on target before upload
- *
- * D-01 through D-19: All implementation decisions from 05-CONTEXT.md
+ * Restore messages from a local git archive to a target IMAP server.
+ * Optionally restores from a point-in-time snapshot (date or commit hash).
  */
 export async function restoreAccount(
   config: RepositoryConfig,
@@ -152,7 +124,6 @@ export async function restoreAccount(
   dateOrCommit: string | undefined,
   options: RestoreOptions
 ): Promise<RestoreResult> {
-  // D-02, D-03: Resolve source path (from main repo or worktree)
   let sourcePath = archivePath
   if (dateOrCommit) {
     const worktreesDir = path.join(path.dirname(archivePath), 'worktrees')
@@ -160,20 +131,18 @@ export async function restoreAccount(
     sourcePath = checkout.path
   }
 
-  // D-06, D-07: Parse target URL
   const target = parseImapUrl(targetUrl)
 
-  // D-12, D-13: If dry-run, skip connection for writes (but may still connect for duplicate checks per D-12)
+  // In dry-run mode skip the write connection; a read-only connection is opened
+  // below only when duplicate checking is also requested.
   const targetClient = options.dryRun ? null : new ImapFlow({
     host: target.host,
     port: target.port,
     secure: target.secure,
     auth: { user: target.username, pass: target.password },
-    logger: false,  // T-3-03: MANDATORY per Phase 3
+    logger: false,  // suppress imapflow's built-in logging
   })
 
-  // D-12: In dry-run with skip-duplicates, open a read-only connection for SEARCH only.
-  // APPEND is suppressed, but SEARCH must run to count duplicates accurately.
   const dryRunClient = (options.dryRun && options.skipDuplicates)
     ? new ImapFlow({
         host: target.host,
@@ -195,7 +164,7 @@ export async function restoreAccount(
       await dryRunClient.connect()
     }
 
-    // REST-04, D-09: List all folders from folders/*.json and create them on target
+    // List all folders from folders/*.json and create them on target
     const folderFiles = await fs.readdir(path.join(sourcePath, 'folders'))
 
     // Read folderPath from each JSON file; fall back to filename reversal for legacy state files
@@ -217,7 +186,7 @@ export async function restoreAccount(
       }
     }
 
-    // Create all folders on target first (D-09)
+    // Create all folders on target before uploading messages
     if (targetClient) {
       for (const folderPath of folderPaths) {
         try {
@@ -229,7 +198,7 @@ export async function restoreAccount(
       }
     }
 
-    // REST-01: Restore messages from each folder
+    // Restore messages from each folder
     for (const folderPath of folderPaths) {
       const folderFilename = folderPathToFilename(folderPath)
       const folderJsonPath = path.join(sourcePath, 'folders', `${folderFilename}.json`)
@@ -242,35 +211,29 @@ export async function restoreAccount(
         continue
       }
 
-      // D-15: Per-folder summary (will be formatted by CLI)
       let folderUploaded = 0
       let folderSkipped = 0
 
-      // Restore each message in the folder
       for (const msg of folderState.messages) {
         const messageId = msg['message-id']
 
         try {
-          // REST-02, D-10, D-11: Check for duplicate if skip-duplicates=yes
           const searchClient = targetClient ?? dryRunClient
           if (options.skipDuplicates && searchClient) {
             if (await isDuplicate(searchClient, folderPath, messageId)) {
               folderSkipped++
               result.skipped++
               if (options.verbose) {
-                // ARCH-01 exception: verbose per-message output is delegated to core (D-15)
                 console.log(`Skipped: ${messageId}`)
               }
               continue
             }
           }
 
-          // Read message content from disk (Pitfall 6: use sanitizeMessageId)
           const sanitized = sanitizeMessageId(messageId)
           const emlPath = path.join(sourcePath, 'messages', `${sanitized}.eml`)
           const content = await fs.readFile(emlPath)
 
-          // REST-01: APPEND to target folder (no-op in dry-run)
           if (targetClient) {
             const lock = await targetClient.getMailboxLock(folderPath)
             try {
@@ -282,14 +245,13 @@ export async function restoreAccount(
               }
             } finally {
               try {
-                await lock.release()  // Pitfall 2: always release
+                await lock.release()
               } catch (_releaseErr) {
                 // Swallow cleanup errors to prevent masking append errors
-                // Lock will eventually timeout on server
               }
             }
           } else {
-            // Dry-run: count as uploaded without actually appending (D-12)
+            // Dry-run: count without appending
             folderUploaded++
             result.uploaded++
             if (options.verbose) {
@@ -297,15 +259,12 @@ export async function restoreAccount(
             }
           }
         } catch (err) {
-          // D-17: Per-message error: continue (do not abort)
           result.errors++
           if (options.verbose) {
             console.log(`Error: ${messageId}`)
           }
         }
       }
-
-      // D-15: Per-folder summary line output (handled by CLI layer)
     }
 
     return result
