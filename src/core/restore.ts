@@ -209,9 +209,6 @@ export async function restoreAccount(
         continue
       }
 
-      let folderUploaded = 0
-      let folderSkipped = 0
-
       for (const msg of folderState.messages) {
         const messageId = msg['message-id']
 
@@ -219,7 +216,6 @@ export async function restoreAccount(
           const searchClient = targetClient ?? dryRunClient
           if (options.skipDuplicates && searchClient) {
             if (await isDuplicate(searchClient, folderPath, messageId)) {
-              folderSkipped++
               result.skipped++
               if (options.verbose) {
                 console.log(`Skipped: ${messageId}`)
@@ -236,7 +232,6 @@ export async function restoreAccount(
             const lock = await targetClient.getMailboxLock(folderPath)
             try {
               await targetClient.append(folderPath, content, [])
-              folderUploaded++
               result.uploaded++
               if (options.verbose) {
                 console.log(`Uploaded: ${messageId}`)
@@ -250,7 +245,6 @@ export async function restoreAccount(
             }
           } else {
             // Dry-run: count without appending
-            folderUploaded++
             result.uploaded++
             if (options.verbose) {
               console.log(`Uploaded: ${messageId}`)
