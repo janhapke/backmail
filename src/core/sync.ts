@@ -311,23 +311,23 @@ async function syncFolder(
 
     // Fetch new messages
     const newMessages: FolderMessage[] = []
-    if (hasNewMessages) for await (const msg of client.fetch(range, { uid: true, source: true, envelope: true, flags: true }, { uid: true })) {
-      const rawId = msg.envelope?.messageId ?? `no-message-id_uid-${msg.uid}_${folderFilename}`
-      const safeId = sanitizeMessageId(rawId)
-      const msgPath = path.join(repoPath, 'messages', `${safeId}.eml`)
+    if (hasNewMessages) {
+      for await (const msg of client.fetch(range, { uid: true, source: true, envelope: true, flags: true }, { uid: true })) {
+        const rawId = msg.envelope?.messageId ?? `no-message-id_uid-${msg.uid}_${folderFilename}`
+        const safeId = sanitizeMessageId(rawId)
+        const msgPath = path.join(repoPath, 'messages', `${safeId}.eml`)
 
-      // Write .eml file
-      await fs.writeFile(msgPath, msg.source as Buffer)
+        await fs.writeFile(msgPath, msg.source as Buffer)
 
-      // Record message metadata
-      const msgFlags = msg.flags ? Array.from(msg.flags) : []
-      newMessages.push({
-        uid: msg.uid,
-        'message-id': rawId,
-        flags: msgFlags,
-      })
+        const msgFlags = msg.flags ? Array.from(msg.flags) : []
+        newMessages.push({
+          uid: msg.uid,
+          'message-id': rawId,
+          flags: msgFlags,
+        })
 
-      added++
+        added++
+      }
     }
 
     // Detect deletions by comparing current server UIDs against stored state
