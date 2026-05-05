@@ -54,6 +54,7 @@ interface FolderState {
  * - Truncate to 200 chars
  */
 export function sanitizeMessageId(messageId: string): string {
+  if (!messageId) throw new Error('sanitizeMessageId: messageId must not be empty')
   let result = messageId
   // Strip angle brackets
   result = result.replace(/^<|>$/g, '')
