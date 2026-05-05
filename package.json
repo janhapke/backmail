@@ -2,6 +2,17 @@
   "name": "backmail",
   "version": "0.1.0",
   "description": "Backup mail to git",
+  "keywords": ["imap", "email", "backup", "git", "cli"],
+  "author": "Jan Hapke",
+  "license": "MIT",
+  "homepage": "https://github.com/janhapke/backmail#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/janhapke/backmail.git"
+  },
+  "bugs": {
+    "url": "https://github.com/janhapke/backmail/issues"
+  },
   "type": "module",
   "bin": {
     "backmail": "./dist/cli/index.js"
