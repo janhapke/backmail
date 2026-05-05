@@ -205,14 +205,12 @@ program
     try {
       const repoRoot = getRepoRoot()
       const archivePath = path.join(repoRoot, 'archive')
-      const config = loadRepositoryConfig(repoRoot)
 
       const skipDuplicates = opts.skipDuplicates === 'yes'
       const dryRun = opts.dryRun ?? false
       const verbose = opts.verbose ?? false
 
       const result = await restoreAccount(
-        config,
         archivePath,
         opts.to,
         dateOrCommit,

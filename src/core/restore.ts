@@ -3,7 +3,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { ImapFlow } from 'imapflow'
-import type { RepositoryConfig } from './config.js'
 import { sanitizeMessageId, folderPathToFilename } from './sync.js'
 import { checkoutCommit } from './browse.js'
 
@@ -118,7 +117,6 @@ export async function createFolderIfNeeded(
  * Optionally restores from a point-in-time snapshot (date or commit hash).
  */
 export async function restoreAccount(
-  config: RepositoryConfig,
   archivePath: string,
   targetUrl: string,
   dateOrCommit: string | undefined,
