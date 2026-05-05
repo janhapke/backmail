@@ -4,6 +4,10 @@ import path from 'node:path'
 import os from 'node:os'
 import { execSync, spawnSync } from 'node:child_process'
 import { sanitizeMessageId } from '../../src/core/sync.js'
+import { fileURLToPath } from 'node:url'
+
+const projectRoot = fileURLToPath(new URL('../..', import.meta.url))
+const cliPath = path.resolve(projectRoot, 'src/cli/index.ts')
 
 let tmpDir: string
 let tmpRepo: string
@@ -108,7 +112,7 @@ afterAll(async () => {
 // Helper to execute backmail CLI
 function executeBackmail(args: string[], env?: Record<string, string>) {
   const result = spawnSync('npx', ['tsx', './src/cli/index.ts', ...args], {
-    cwd: '/home/jan/dev/backmail',
+    cwd: cliPath,
     encoding: 'utf-8',
     env: { ...process.env, ...env, HOME: tmpDir },
   })
@@ -211,7 +215,7 @@ describe('CLI: error handling', () => {
     const tmpHomeEmpty = await fs.mkdtemp(path.join(os.tmpdir(), 'empty-config-'))
     try {
       const result = spawnSync('npx', ['tsx', './src/cli/index.ts', 'restore', '--help'], {
-        cwd: '/home/jan/dev/backmail',
+        cwd: cliPath,
         encoding: 'utf-8',
         env: { ...process.env, HOME: tmpHomeEmpty },
       })
@@ -257,7 +261,7 @@ describe('CLI: restore output formatting', () => {
 
   it('Final summary includes exit code', async () => {
     const result = spawnSync('npx', ['tsx', './src/cli/index.ts', 'restore', '--to', 'imap://user:pass@localhost:9999', '--dry-run'], {
-      cwd: '/home/jan/dev/backmail',
+      cwd: cliPath,
       encoding: 'utf-8',
       env: { ...process.env, HOME: tmpDir },
     })
