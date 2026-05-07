@@ -75,6 +75,16 @@ describe('loadRepositoryConfig', () => {
     )
     expect(() => loadRepositoryConfig(tmpDir)).toThrow()
   })
+
+  it('re-throws non-ENOENT errors from readFileSync (e.g. EACCES)', () => {
+    const acces = Object.assign(new Error('permission denied'), { code: 'EACCES' })
+    const spy = vi.spyOn(fs, 'readFileSync').mockImplementationOnce(() => { throw acces })
+    try {
+      expect(() => loadRepositoryConfig(tmpDir)).toThrow('permission denied')
+    } finally {
+      spy.mockRestore()
+    }
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -170,6 +180,19 @@ describe('getPasswordByRef — keyring returns null, BACKMAIL_PASSWORD fallback'
 // CRED-03: getPasswordByRef — keyring throws, BACKMAIL_PASSWORD fallback
 // ---------------------------------------------------------------------------
 
+describe('getPasswordByRef — keyring returns a Promise (async keyring)', () => {
+  beforeEach(async () => {
+    const { _mockGetPassword } = (await import('@napi-rs/keyring')) as any
+    _mockGetPassword.mockReset()
+    _mockGetPassword.mockReturnValue(Promise.resolve('async-secret'))
+  })
+
+  it('awaits the Promise and returns the resolved password', async () => {
+    const result = await getPasswordByRef('keyring:service=backmail;account=jan')
+    expect(result).toBe('async-secret')
+  })
+})
+
 describe('getPasswordByRef — keyring throws, BACKMAIL_PASSWORD fallback', () => {
   beforeEach(async () => {
     const { _mockGetPassword } = (await import('@napi-rs/keyring')) as any
@@ -184,9 +207,46 @@ describe('getPasswordByRef — keyring throws, BACKMAIL_PASSWORD fallback', () =
     delete process.env.BACKMAIL_PASSWORD
   })
 
-  it('falls back to BACKMAIL_PASSWORD when keyring throws', async () => {
+  it('falls back to BACKMAIL_PASSWORD when keyring throws a dbus error', async () => {
     const result = await getPasswordByRef('keyring:service=backmail;account=jan')
     expect(result).toBe('envfallback')
+  })
+})
+
+describe('getPasswordByRef — keyring throws "No such interface"', () => {
+  beforeEach(async () => {
+    const { _mockGetPassword } = (await import('@napi-rs/keyring')) as any
+    _mockGetPassword.mockReset()
+    _mockGetPassword.mockImplementation(() => {
+      throw new Error('No such interface "org.freedesktop.Secret.Service"')
+    })
+    process.env.BACKMAIL_PASSWORD = 'envfallback'
+  })
+
+  afterEach(() => {
+    delete process.env.BACKMAIL_PASSWORD
+  })
+
+  it('swallows D-Bus "No such interface" error and falls back to BACKMAIL_PASSWORD', async () => {
+    const result = await getPasswordByRef('keyring:service=backmail;account=jan')
+    expect(result).toBe('envfallback')
+  })
+})
+
+describe('getPasswordByRef — keyring throws an unexpected error', () => {
+  beforeEach(async () => {
+    const { _mockGetPassword } = (await import('@napi-rs/keyring')) as any
+    _mockGetPassword.mockReset()
+    _mockGetPassword.mockImplementation(() => {
+      throw new Error('Unexpected internal failure')
+    })
+    delete process.env.BACKMAIL_PASSWORD
+  })
+
+  it('re-throws errors that are not keyring/dbus/No-such-interface errors', async () => {
+    await expect(
+      getPasswordByRef('keyring:service=backmail;account=jan')
+    ).rejects.toThrow('Unexpected internal failure')
   })
 })
 
