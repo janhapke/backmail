@@ -112,7 +112,7 @@ afterAll(async () => {
 // Helper to execute backmail CLI
 function executeBackmail(args: string[], env?: Record<string, string>) {
   const result = spawnSync('npx', ['tsx', './src/cli/index.ts', ...args], {
-    cwd: cliPath,
+    cwd: projectRoot,
     encoding: 'utf-8',
     env: { ...process.env, ...env, HOME: tmpDir },
   })
@@ -215,7 +215,7 @@ describe('CLI: error handling', () => {
     const tmpHomeEmpty = await fs.mkdtemp(path.join(os.tmpdir(), 'empty-config-'))
     try {
       const result = spawnSync('npx', ['tsx', './src/cli/index.ts', 'restore', '--help'], {
-        cwd: cliPath,
+        cwd: projectRoot,
         encoding: 'utf-8',
         env: { ...process.env, HOME: tmpHomeEmpty },
       })
@@ -261,7 +261,7 @@ describe('CLI: restore output formatting', () => {
 
   it('Final summary includes exit code', async () => {
     const result = spawnSync('npx', ['tsx', './src/cli/index.ts', 'restore', '--to', 'imap://user:pass@localhost:9999', '--dry-run'], {
-      cwd: cliPath,
+      cwd: projectRoot,
       encoding: 'utf-8',
       env: { ...process.env, HOME: tmpDir },
     })
