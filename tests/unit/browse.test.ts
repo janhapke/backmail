@@ -413,4 +413,148 @@ Body`
       viewMessage(tempDir, '<nonexistent@example.com>', 'plaintext')
     ).rejects.toThrow(/Message not found/)
   })
+
+  it('includes html part in json output when email has text/html content', async () => {
+    const messagesPath = path.join(tempDir, 'messages')
+    await fs.mkdir(messagesPath)
+
+    const msgId = '<html@example.com>'
+    const eml = [
+      'From: test@example.com',
+      'Subject: HTML Email',
+      'MIME-Version: 1.0',
+      'Content-Type: multipart/alternative; boundary="b"',
+      '',
+      '--b',
+      'Content-Type: text/plain',
+      '',
+      'Plain text version',
+      '--b',
+      'Content-Type: text/html',
+      '',
+      '<html><body>HTML content</body></html>',
+      '--b--',
+    ].join('\r\n')
+
+    await fs.writeFile(path.join(messagesPath, `${sanitizeMessageId(msgId)}.eml`), eml)
+
+    const result = await viewMessage(tempDir, msgId, 'json') as Record<string, unknown>
+    const parts = result.parts as Array<{ type: string; content: string }>
+    const htmlPart = parts.find(p => p.type === 'text/html')
+    expect(htmlPart).toBeDefined()
+    expect(htmlPart?.content).toContain('HTML content')
+  })
+
+  it('includes base64-encoded attachments in json output', async () => {
+    const messagesPath = path.join(tempDir, 'messages')
+    await fs.mkdir(messagesPath)
+
+    const msgId = '<attachment@example.com>'
+    const eml = [
+      'From: test@example.com',
+      'Subject: Attachment',
+      'MIME-Version: 1.0',
+      'Content-Type: multipart/mixed; boundary="b"',
+      '',
+      '--b',
+      'Content-Type: text/plain',
+      '',
+      'Email with attachment',
+      '--b',
+      'Content-Type: application/octet-stream',
+      'Content-Disposition: attachment; filename="file.bin"',
+      'Content-Transfer-Encoding: base64',
+      '',
+      'YmluYXJ5IGNvbnRlbnQ=',
+      '--b--',
+    ].join('\r\n')
+
+    await fs.writeFile(path.join(messagesPath, `${sanitizeMessageId(msgId)}.eml`), eml)
+
+    const result = await viewMessage(tempDir, msgId, 'json') as Record<string, unknown>
+    const parts = result.parts as Array<{ type: string; content: string }>
+    const attPart = parts.find(p => p.type === 'application/octet-stream')
+    expect(attPart).toBeDefined()
+    expect(typeof attPart?.content).toBe('string')
+    expect(attPart?.content.length).toBeGreaterThan(0)
+  })
+})
+
+// ── checkoutCommit Tests ──────────────────────────────────────────────────────
+
+describe('checkoutCommit', () => {
+  let repoDir: string
+  let worktreesDir: string
+
+  beforeEach(async () => {
+    repoDir = await fs.mkdtemp(path.join(os.tmpdir(), 'browse-repo-'))
+    worktreesDir = await fs.mkdtemp(path.join(os.tmpdir(), 'browse-worktrees-'))
+
+    const { execSync } = await import('node:child_process')
+    execSync('git init', { cwd: repoDir })
+    execSync('git config user.email "test@example.com"', { cwd: repoDir })
+    execSync('git config user.name "Test"', { cwd: repoDir })
+    await fs.writeFile(path.join(repoDir, 'file.txt'), 'hello')
+    execSync('git add file.txt', { cwd: repoDir })
+    execSync('git commit -m "initial"', { cwd: repoDir })
+  })
+
+  afterEach(async () => {
+    try { await fs.rm(repoDir, { recursive: true, force: true }) } catch {}
+    try { await fs.rm(worktreesDir, { recursive: true, force: true }) } catch {}
+  })
+
+  it('checks out a commit by hash and returns the worktree path and short sha', async () => {
+    const { execSync } = await import('node:child_process')
+    const hash = execSync('git rev-parse HEAD', { cwd: repoDir }).toString().trim()
+
+    const result = await checkoutCommit(repoDir, hash, worktreesDir)
+
+    expect(result.sha).toBe(hash.slice(0, 7))
+    expect(result.path).toContain(hash.slice(0, 7))
+    const exists = await fs.access(result.path).then(() => true).catch(() => false)
+    expect(exists).toBe(true)
+  })
+
+  it('re-creates the worktree cleanly when called twice with the same hash', async () => {
+    const { execSync } = await import('node:child_process')
+    const hash = execSync('git rev-parse HEAD', { cwd: repoDir }).toString().trim()
+
+    const first = await checkoutCommit(repoDir, hash, worktreesDir)
+    const second = await checkoutCommit(repoDir, hash, worktreesDir)
+
+    expect(second.path).toBe(first.path)
+    expect(second.sha).toBe(first.sha)
+    const exists = await fs.access(second.path).then(() => true).catch(() => false)
+    expect(exists).toBe(true)
+  })
+
+  it('checks out by date string (YYYY-MM-DD) and resolves to the matching commit', async () => {
+    const { execSync } = await import('node:child_process')
+    const fixedDate = '2026-01-15'
+
+    // Make a second commit pinned to that date
+    await fs.writeFile(path.join(repoDir, 'dated.txt'), 'dated')
+    execSync('git add dated.txt', { cwd: repoDir })
+    execSync('git commit -m "dated commit"', {
+      cwd: repoDir,
+      env: {
+        ...process.env,
+        GIT_AUTHOR_DATE: `${fixedDate}T12:00:00`,
+        GIT_COMMITTER_DATE: `${fixedDate}T12:00:00`,
+      },
+    })
+    const hash = execSync('git rev-parse HEAD', { cwd: repoDir }).toString().trim()
+
+    const result = await checkoutCommit(repoDir, fixedDate, worktreesDir)
+
+    expect(result.sha).toBe(hash.slice(0, 7))
+    expect(result.path).toContain(fixedDate)
+  })
+
+  it('throws when no commit exists for the given date', async () => {
+    await expect(
+      checkoutCommit(repoDir, '1999-01-01', worktreesDir)
+    ).rejects.toThrow(/No sync commit found for date 1999-01-01/)
+  })
 })
