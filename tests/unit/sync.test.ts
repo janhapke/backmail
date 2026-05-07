@@ -291,3 +291,203 @@ describe('SYNC-01: uidNext guard', () => {
     expect(fetchMock).toHaveBeenCalledOnce()
   })
 })
+
+// ---------------------------------------------------------------------------
+// SYNC-05: uidvalidity change → full wipe and re-sync
+// Lines 289-298 in sync.ts
+// ---------------------------------------------------------------------------
+
+describe('SYNC-05: uidvalidity change triggers full wipe and re-sync', () => {
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backmail-uidvalidity-'))
+    fs.mkdirSync(path.join(tmpDir, 'folders'), { recursive: true })
+    fs.mkdirSync(path.join(tmpDir, 'messages'), { recursive: true })
+  })
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('deletes all stored .eml files and counts them as removed when uidvalidity changes', async () => {
+    const storedState = {
+      folderPath: 'INBOX',
+      uidvalidity: '1',   // server will report '2' → mismatch
+      uidnext: 3,
+      messages: [
+        { uid: 1, 'message-id': '<old1@example.com>', flags: [] },
+        { uid: 2, 'message-id': '<old2@example.com>', flags: [] },
+      ],
+    }
+    fs.writeFileSync(path.join(tmpDir, 'folders', 'INBOX.json'), JSON.stringify(storedState))
+    fs.writeFileSync(path.join(tmpDir, 'messages', 'old1@example.com.eml'), 'old email 1')
+    fs.writeFileSync(path.join(tmpDir, 'messages', 'old2@example.com.eml'), 'old email 2')
+
+    vi.mocked(ImapFlow).mockImplementationOnce(function () {
+      return {
+        connect: vi.fn().mockResolvedValue(undefined),
+        logout: vi.fn().mockResolvedValue(undefined),
+        list: vi.fn().mockResolvedValue([{ path: 'INBOX', delimiter: '/', flags: new Set() }]),
+        getMailboxLock: vi.fn().mockResolvedValue({ release: vi.fn() }),
+        fetch: vi.fn().mockImplementation(async function* () {}),  // no new messages
+        search: vi.fn().mockResolvedValue([]),
+        mailbox: { uidValidity: 2n, uidNext: 1 },  // uidValidity changed: '1' → '2'
+      }
+    } as any)
+
+    const result = await syncAccount(
+      { host: 'localhost', port: 993, username: 'u', tls: true, passwordRef: 'keyring:service=test;account=test' },
+      tmpDir,
+      { excludeFolders: [], onlyFolders: [], verbose: false },
+    )
+
+    expect(result.removed).toBe(2)
+    expect(result.added).toBe(0)
+    expect(fs.existsSync(path.join(tmpDir, 'messages', 'old1@example.com.eml'))).toBe(false)
+    expect(fs.existsSync(path.join(tmpDir, 'messages', 'old2@example.com.eml'))).toBe(false)
+  })
+
+  it('fetches all messages from scratch after a uidvalidity change', async () => {
+    const storedState = {
+      folderPath: 'INBOX',
+      uidvalidity: '1',
+      uidnext: 2,
+      messages: [{ uid: 1, 'message-id': '<stale@example.com>', flags: [] }],
+    }
+    fs.writeFileSync(path.join(tmpDir, 'folders', 'INBOX.json'), JSON.stringify(storedState))
+    fs.writeFileSync(path.join(tmpDir, 'messages', 'stale@example.com.eml'), 'stale')
+
+    const fetchMock = vi.fn().mockImplementation(async function* () {
+      yield {
+        uid: 1,
+        envelope: { messageId: '<fresh@example.com>' },
+        source: Buffer.from('fresh email content'),
+        flags: new Set<string>(),
+      }
+    })
+    vi.mocked(ImapFlow).mockImplementationOnce(function () {
+      return {
+        connect: vi.fn().mockResolvedValue(undefined),
+        logout: vi.fn().mockResolvedValue(undefined),
+        list: vi.fn().mockResolvedValue([{ path: 'INBOX', delimiter: '/', flags: new Set() }]),
+        getMailboxLock: vi.fn().mockResolvedValue({ release: vi.fn() }),
+        fetch: fetchMock,
+        search: vi.fn().mockResolvedValue([1]),
+        mailbox: { uidValidity: 99n, uidNext: 2 },
+      }
+    } as any)
+
+    const result = await syncAccount(
+      { host: 'localhost', port: 993, username: 'u', tls: true, passwordRef: 'keyring:service=test;account=test' },
+      tmpDir,
+      { excludeFolders: [], onlyFolders: [], verbose: false },
+    )
+
+    // Old message wiped, new message fetched from scratch using '1:*'
+    expect(result.removed).toBe(1)
+    expect(result.added).toBe(1)
+    expect(fetchMock).toHaveBeenCalledWith('1:*', expect.anything(), expect.anything())
+  })
+})
+
+// ---------------------------------------------------------------------------
+// SYNC-06: Message deletion — server-side deletes purge local .eml files
+// Lines 342-347 in sync.ts
+// ---------------------------------------------------------------------------
+
+describe('SYNC-06: message deletion removes local .eml files', () => {
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backmail-deletion-'))
+    fs.mkdirSync(path.join(tmpDir, 'folders'), { recursive: true })
+    fs.mkdirSync(path.join(tmpDir, 'messages'), { recursive: true })
+  })
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('deletes .eml for a message whose UID is no longer on the server', async () => {
+    const storedState = {
+      folderPath: 'INBOX',
+      uidvalidity: '1',
+      uidnext: 4,
+      messages: [
+        { uid: 1, 'message-id': '<keep1@example.com>', flags: [] },
+        { uid: 2, 'message-id': '<keep2@example.com>', flags: [] },
+        { uid: 3, 'message-id': '<deleted@example.com>', flags: [] },
+      ],
+    }
+    fs.writeFileSync(path.join(tmpDir, 'folders', 'INBOX.json'), JSON.stringify(storedState))
+    fs.writeFileSync(path.join(tmpDir, 'messages', 'keep1@example.com.eml'), 'keep')
+    fs.writeFileSync(path.join(tmpDir, 'messages', 'keep2@example.com.eml'), 'keep')
+    fs.writeFileSync(path.join(tmpDir, 'messages', 'deleted@example.com.eml'), 'deleted')
+
+    vi.mocked(ImapFlow).mockImplementationOnce(function () {
+      return {
+        connect: vi.fn().mockResolvedValue(undefined),
+        logout: vi.fn().mockResolvedValue(undefined),
+        list: vi.fn().mockResolvedValue([{ path: 'INBOX', delimiter: '/', flags: new Set() }]),
+        getMailboxLock: vi.fn().mockResolvedValue({ release: vi.fn() }),
+        fetch: vi.fn().mockImplementation(async function* () {}),  // lastUid+1 >= uidNext → no fetch
+        search: vi.fn().mockResolvedValue([1, 2]),  // UID 3 is gone from server
+        mailbox: { uidValidity: 1n, uidNext: 4 },
+      }
+    } as any)
+
+    const result = await syncAccount(
+      { host: 'localhost', port: 993, username: 'u', tls: true, passwordRef: 'keyring:service=test;account=test' },
+      tmpDir,
+      { excludeFolders: [], onlyFolders: [], verbose: false },
+    )
+
+    expect(result.removed).toBe(1)
+    expect(fs.existsSync(path.join(tmpDir, 'messages', 'deleted@example.com.eml'))).toBe(false)
+    expect(fs.existsSync(path.join(tmpDir, 'messages', 'keep1@example.com.eml'))).toBe(true)
+    expect(fs.existsSync(path.join(tmpDir, 'messages', 'keep2@example.com.eml'))).toBe(true)
+  })
+
+  it('removes multiple deleted messages and updates result.removed correctly', async () => {
+    const storedState = {
+      folderPath: 'INBOX',
+      uidvalidity: '1',
+      uidnext: 5,
+      messages: [
+        { uid: 1, 'message-id': '<a@example.com>', flags: [] },
+        { uid: 2, 'message-id': '<b@example.com>', flags: [] },
+        { uid: 3, 'message-id': '<c@example.com>', flags: [] },
+        { uid: 4, 'message-id': '<d@example.com>', flags: [] },
+      ],
+    }
+    fs.writeFileSync(path.join(tmpDir, 'folders', 'INBOX.json'), JSON.stringify(storedState))
+    for (const id of ['a', 'b', 'c', 'd']) {
+      fs.writeFileSync(path.join(tmpDir, 'messages', `${id}@example.com.eml`), 'content')
+    }
+
+    vi.mocked(ImapFlow).mockImplementationOnce(function () {
+      return {
+        connect: vi.fn().mockResolvedValue(undefined),
+        logout: vi.fn().mockResolvedValue(undefined),
+        list: vi.fn().mockResolvedValue([{ path: 'INBOX', delimiter: '/', flags: new Set() }]),
+        getMailboxLock: vi.fn().mockResolvedValue({ release: vi.fn() }),
+        fetch: vi.fn().mockImplementation(async function* () {}),
+        search: vi.fn().mockResolvedValue([1]),  // UIDs 2, 3, 4 deleted
+        mailbox: { uidValidity: 1n, uidNext: 5 },
+      }
+    } as any)
+
+    const result = await syncAccount(
+      { host: 'localhost', port: 993, username: 'u', tls: true, passwordRef: 'keyring:service=test;account=test' },
+      tmpDir,
+      { excludeFolders: [], onlyFolders: [], verbose: false },
+    )
+
+    expect(result.removed).toBe(3)
+    expect(fs.existsSync(path.join(tmpDir, 'messages', 'a@example.com.eml'))).toBe(true)
+    expect(fs.existsSync(path.join(tmpDir, 'messages', 'b@example.com.eml'))).toBe(false)
+    expect(fs.existsSync(path.join(tmpDir, 'messages', 'c@example.com.eml'))).toBe(false)
+    expect(fs.existsSync(path.join(tmpDir, 'messages', 'd@example.com.eml'))).toBe(false)
+  })
+})
