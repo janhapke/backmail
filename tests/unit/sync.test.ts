@@ -7,6 +7,7 @@ import { simpleGit } from 'simple-git'
 
 import {
   syncAccount,
+  ensureRepo,
   sanitizeMessageId,
   folderPathToFilename,
   formatCommitMessage,
@@ -672,5 +673,50 @@ describe('SYNC-09: git commit failure marks result as partial', () => {
 
     expect(result.partial).toBe(true)
     expect(result.added).toBe(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// ensureRepo: git init path (lines 156-157)
+// ---------------------------------------------------------------------------
+
+describe('ensureRepo — initialises a new git repo when none exists', () => {
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backmail-ensure-repo-'))
+  })
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('calls git.init() and returns true when the directory is not a repo', async () => {
+    const initMock = vi.fn().mockResolvedValue(undefined)
+    vi.mocked(simpleGit).mockImplementationOnce(() => ({
+      checkIsRepo: vi.fn().mockResolvedValue(false),
+      init:        initMock,
+    }) as any)
+
+    const result = await ensureRepo(tmpDir)
+
+    expect(result).toBe(true)
+    expect(initMock).toHaveBeenCalledOnce()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// syncAccount mutual-exclusion guard (line 170)
+// ---------------------------------------------------------------------------
+
+describe('syncAccount — mutual-exclusion guard', () => {
+  it('throws when both onlyFolders and excludeFolders are non-empty', async () => {
+    await expect(
+      syncAccount(
+        { host: 'localhost', port: 993, username: 'u', tls: true, passwordRef: 'keyring:service=test;account=test' },
+        '/tmp/irrelevant',
+        { onlyFolders: ['INBOX'], excludeFolders: ['Trash'], verbose: false },
+      )
+    ).rejects.toThrow('mutually exclusive')
   })
 })
