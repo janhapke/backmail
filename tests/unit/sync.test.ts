@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs'
 import { ImapFlow } from 'imapflow'
+import { simpleGit } from 'simple-git'
 
 import {
   syncAccount,
@@ -489,5 +490,187 @@ describe('SYNC-06: message deletion removes local .eml files', () => {
     expect(fs.existsSync(path.join(tmpDir, 'messages', 'b@example.com.eml'))).toBe(false)
     expect(fs.existsSync(path.join(tmpDir, 'messages', 'c@example.com.eml'))).toBe(false)
     expect(fs.existsSync(path.join(tmpDir, 'messages', 'd@example.com.eml'))).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// SYNC-07: Per-folder error accumulation (lines 212-218)
+//          and mailbox type guard (line 276)
+// ---------------------------------------------------------------------------
+
+describe('SYNC-07: per-folder errors accumulate without aborting the sync', () => {
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backmail-per-folder-'))
+    fs.mkdirSync(path.join(tmpDir, 'folders'), { recursive: true })
+    fs.mkdirSync(path.join(tmpDir, 'messages'), { recursive: true })
+  })
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('records error in folderResults when client.mailbox is null after lock (line 276)', async () => {
+    vi.mocked(ImapFlow).mockImplementationOnce(function () {
+      return {
+        connect:        vi.fn().mockResolvedValue(undefined),
+        logout:         vi.fn().mockResolvedValue(undefined),
+        list:           vi.fn().mockResolvedValue([{ path: 'INBOX', delimiter: '/', flags: new Set() }]),
+        getMailboxLock: vi.fn().mockResolvedValue({ release: vi.fn() }),
+        fetch:          vi.fn().mockImplementation(async function* () {}),
+        search:         vi.fn().mockResolvedValue([]),
+        mailbox:        null,  // triggers the type guard at line 275-276
+      }
+    } as any)
+
+    const result = await syncAccount(
+      { host: 'localhost', port: 993, username: 'u', tls: true, passwordRef: 'keyring:service=test;account=test' },
+      tmpDir,
+      { excludeFolders: [], onlyFolders: [], verbose: false },
+    )
+
+    expect(result.folderResults).toHaveLength(1)
+    expect(result.folderResults[0].error).toBeInstanceOf(Error)
+    expect(result.folderResults[0].error?.message).toContain('Failed to access mailbox')
+    expect(result.added).toBe(0)
+  })
+
+  it('continues syncing remaining folders after a per-folder error', async () => {
+    vi.mocked(ImapFlow).mockImplementationOnce(function () {
+      let lockCallCount = 0
+      return {
+        connect:        vi.fn().mockResolvedValue(undefined),
+        logout:         vi.fn().mockResolvedValue(undefined),
+        list:           vi.fn().mockResolvedValue([
+          { path: 'Broken', delimiter: '/', flags: new Set() },
+          { path: 'INBOX',  delimiter: '/', flags: new Set() },
+        ]),
+        getMailboxLock: vi.fn().mockImplementation(async () => {
+          lockCallCount++
+          if (lockCallCount === 1) throw new Error('lock failed on Broken')
+          return { release: vi.fn() }
+        }),
+        fetch:          vi.fn().mockImplementation(async function* () {}),
+        search:         vi.fn().mockResolvedValue([]),
+        mailbox:        { uidValidity: 1n, uidNext: 1 },
+      }
+    } as any)
+
+    const result = await syncAccount(
+      { host: 'localhost', port: 993, username: 'u', tls: true, passwordRef: 'keyring:service=test;account=test' },
+      tmpDir,
+      { excludeFolders: [], onlyFolders: [], verbose: false },
+    )
+
+    expect(result.folderResults).toHaveLength(2)
+    expect(result.folderResults[0].error).toBeInstanceOf(Error)
+    expect(result.folderResults[1].error).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// SYNC-08: Connection-level error re-throw (line 225)
+// ---------------------------------------------------------------------------
+
+describe('SYNC-08: connection error re-throws when no data has been written', () => {
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backmail-conn-err-'))
+    fs.mkdirSync(path.join(tmpDir, 'folders'), { recursive: true })
+    fs.mkdirSync(path.join(tmpDir, 'messages'), { recursive: true })
+  })
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('re-throws connection error when added === 0 and removed === 0', async () => {
+    vi.mocked(ImapFlow).mockImplementationOnce(function () {
+      return {
+        connect:        vi.fn().mockRejectedValue(new Error('Connection refused')),
+        logout:         vi.fn().mockResolvedValue(undefined),
+        list:           vi.fn().mockResolvedValue([]),
+        getMailboxLock: vi.fn().mockResolvedValue({ release: vi.fn() }),
+        fetch:          vi.fn().mockImplementation(async function* () {}),
+        search:         vi.fn().mockResolvedValue([]),
+        mailbox:        { uidValidity: 1n, uidNext: 1 },
+      }
+    } as any)
+
+    await expect(
+      syncAccount(
+        { host: 'localhost', port: 993, username: 'u', tls: true, passwordRef: 'keyring:service=test;account=test' },
+        tmpDir,
+        { excludeFolders: [], onlyFolders: [], verbose: false },
+      )
+    ).rejects.toThrow('Connection refused')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// SYNC-09: Git commit failure marks result partial (lines 235-241)
+// ---------------------------------------------------------------------------
+
+describe('SYNC-09: git commit failure marks result as partial', () => {
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backmail-git-fail-'))
+    fs.mkdirSync(path.join(tmpDir, 'folders'), { recursive: true })
+    fs.mkdirSync(path.join(tmpDir, 'messages'), { recursive: true })
+  })
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('returns partial=true without throwing when git commit fails after a successful sync', async () => {
+    vi.mocked(ImapFlow).mockImplementationOnce(function () {
+      return {
+        connect:        vi.fn().mockResolvedValue(undefined),
+        logout:         vi.fn().mockResolvedValue(undefined),
+        list:           vi.fn().mockResolvedValue([{ path: 'INBOX', delimiter: '/', flags: new Set() }]),
+        getMailboxLock: vi.fn().mockResolvedValue({ release: vi.fn() }),
+        fetch:          vi.fn().mockImplementation(async function* () {
+          yield {
+            uid: 1,
+            envelope: { messageId: '<test@example.com>' },
+            source: Buffer.from('email content'),
+            flags: new Set<string>(),
+          }
+        }),
+        search:  vi.fn().mockResolvedValue([1]),
+        mailbox: { uidValidity: 1n, uidNext: 2 },
+      }
+    } as any)
+
+    // simpleGit is called twice: once in ensureRepo, once for the final commit.
+    // Override both: first call (ensureRepo) works normally, second call fails on commit.
+    vi.mocked(simpleGit)
+      .mockImplementationOnce(() => ({
+        checkIsRepo: vi.fn().mockResolvedValue(true),
+        init:        vi.fn().mockResolvedValue(undefined),
+        add:         vi.fn().mockResolvedValue(undefined),
+        commit:      vi.fn().mockResolvedValue({}),
+        status:      vi.fn().mockResolvedValue({ isClean: () => true }),
+      }) as any)
+      .mockImplementationOnce(() => ({
+        checkIsRepo: vi.fn().mockResolvedValue(true),
+        init:        vi.fn().mockResolvedValue(undefined),
+        add:         vi.fn().mockResolvedValue(undefined),
+        commit:      vi.fn().mockRejectedValue(new Error('git commit failed')),
+        status:      vi.fn().mockResolvedValue({ isClean: () => false }),
+      }) as any)
+
+    const result = await syncAccount(
+      { host: 'localhost', port: 993, username: 'u', tls: true, passwordRef: 'keyring:service=test;account=test' },
+      tmpDir,
+      { excludeFolders: [], onlyFolders: [], verbose: false },
+    )
+
+    expect(result.partial).toBe(true)
+    expect(result.added).toBe(1)
   })
 })
