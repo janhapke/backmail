@@ -165,7 +165,7 @@ export async function restoreAccount(
     // List all folders from folders/*.json and create them on target
     const folderFiles = await fs.readdir(path.join(sourcePath, 'folders'))
 
-    // Read folderPath from each JSON file; fall back to filename reversal for legacy state files
+    // Read folderPath from each JSON file
     const folderPaths: string[] = []
     for (const folderFilename of folderFiles.filter(f => f.endsWith('.json'))) {
       try {
@@ -173,10 +173,6 @@ export async function restoreAccount(
         const folderStateData: { folderPath?: string } = JSON.parse(await fs.readFile(folderJsonPath, 'utf-8'))
         if (folderStateData.folderPath && typeof folderStateData.folderPath === 'string') {
           folderPaths.push(folderStateData.folderPath)
-        } else {
-          // Legacy fallback: reconstruct from filename (less reliable, no folderPath stored)
-          const sanitizedName = folderFilename.replace(/\.json$/, '')
-          folderPaths.push(sanitizedName.replace(/_/g, '/'))
         }
       } catch {
         // Skip malformed JSON; caught again during message restoration
