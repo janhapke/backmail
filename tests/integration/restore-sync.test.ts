@@ -4,9 +4,8 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
 import { execSync } from 'node:child_process'
-import { sanitizeMessageId, folderPathToFilename } from '../../src/core/sync.js'
+import { sanitizeMessageId } from '../../src/core/sync.js'
 import { restoreAccount } from '../../src/core/restore.js'
-import type { RestoreResult, RestoreOptions } from '../../src/core/restore.js'
 
 // Allow override via env vars for CI environments that map ports differently
 const IMAP_HOST = process.env.IMAP_HOST ?? 'localhost'
@@ -34,6 +33,7 @@ beforeAll(async () => {
 
   // Create initial commit with folder state and messages
   const inboxState = {
+    folderPath: 'INBOX',
     uidvalidity: '1234567890',
     uidnext: 6,
     messages: [
@@ -103,17 +103,9 @@ afterAll(async () => {
 
 describe('REST-01: Message upload from local checkout to target', () => {
   it('restoreAccount() uploads all messages from a checkout to target IMAP server', async () => {
-    const accountConfig = {
-      host: IMAP_HOST,
-      port: IMAP_PORT,
-      username: IMAP_USER,
-      tls: false,
-      passwordRef: 'env:BACKMAIL_TEST_PASSWORD',
-    }
-
     const targetUrl = `imap://${IMAP_USER}:${IMAP_PASS}@${IMAP_HOST}:${IMAP_PORT}`
 
-    const result = await restoreAccount(accountConfig, tmpRepo, targetUrl, undefined, {
+    const result = await restoreAccount(tmpRepo, targetUrl, undefined, {
       skipDuplicates: false,
       dryRun: false,
       verbose: false,
@@ -183,17 +175,9 @@ describe('REST-02: Duplicate checking with --skip-duplicates=yes', () => {
     await lock.release()
     await seeder.logout()
 
-    const accountConfig = {
-      host: IMAP_HOST,
-      port: IMAP_PORT,
-      username: IMAP_USER,
-      tls: false,
-      passwordRef: 'env:BACKMAIL_TEST_PASSWORD',
-    }
-
     const targetUrl = `imap://${IMAP_USER}:${IMAP_PASS}@${IMAP_HOST}:${IMAP_PORT}`
 
-    const result = await restoreAccount(accountConfig, tmpRepo, targetUrl, undefined, {
+    const result = await restoreAccount(tmpRepo, targetUrl, undefined, {
       skipDuplicates: true,
       dryRun: false,
       verbose: false,
@@ -204,17 +188,9 @@ describe('REST-02: Duplicate checking with --skip-duplicates=yes', () => {
   })
 
   it('With skip-duplicates=no, all messages upload even if duplicates exist', async () => {
-    const accountConfig = {
-      host: IMAP_HOST,
-      port: IMAP_PORT,
-      username: IMAP_USER,
-      tls: false,
-      passwordRef: 'env:BACKMAIL_TEST_PASSWORD',
-    }
-
     const targetUrl = `imap://${IMAP_USER}:${IMAP_PASS}@${IMAP_HOST}:${IMAP_PORT}`
 
-    const result = await restoreAccount(accountConfig, tmpRepo, targetUrl, undefined, {
+    const result = await restoreAccount(tmpRepo, targetUrl, undefined, {
       skipDuplicates: false,
       dryRun: false,
       verbose: false,
@@ -231,14 +207,6 @@ describe('REST-02: Duplicate checking with --skip-duplicates=yes', () => {
 
 describe('REST-03: Dry-run produces output without writing', () => {
   it('dryRun=true produces same output format without writing to target', async () => {
-    const accountConfig = {
-      host: IMAP_HOST,
-      port: IMAP_PORT,
-      username: IMAP_USER,
-      tls: false,
-      passwordRef: 'env:BACKMAIL_TEST_PASSWORD',
-    }
-
     const targetUrl = `imap://${IMAP_USER}:${IMAP_PASS}@${IMAP_HOST}:${IMAP_PORT}`
 
     // Count messages before dry-run
@@ -258,7 +226,7 @@ describe('REST-03: Dry-run produces output without writing', () => {
     const countBeforeLength = countBefore !== false ? countBefore.length : 0
 
     // Perform dry-run
-    const result = await restoreAccount(accountConfig, tmpRepo, targetUrl, undefined, {
+    const result = await restoreAccount(tmpRepo, targetUrl, undefined, {
       skipDuplicates: false,
       dryRun: true,
       verbose: false,
@@ -285,17 +253,9 @@ describe('REST-03: Dry-run produces output without writing', () => {
   })
 
   it('Dry-run output respects --verbose flag', async () => {
-    const accountConfig = {
-      host: IMAP_HOST,
-      port: IMAP_PORT,
-      username: IMAP_USER,
-      tls: false,
-      passwordRef: 'env:BACKMAIL_TEST_PASSWORD',
-    }
-
     const targetUrl = `imap://${IMAP_USER}:${IMAP_PASS}@${IMAP_HOST}:${IMAP_PORT}`
 
-    const result = await restoreAccount(accountConfig, tmpRepo, targetUrl, undefined, {
+    const result = await restoreAccount(tmpRepo, targetUrl, undefined, {
       skipDuplicates: false,
       dryRun: true,
       verbose: true,
@@ -311,17 +271,9 @@ describe('REST-03: Dry-run produces output without writing', () => {
 
 describe('REST-04: Folder structure preserved on target', () => {
   it('Missing folders are created on target before message append', async () => {
-    const accountConfig = {
-      host: IMAP_HOST,
-      port: IMAP_PORT,
-      username: IMAP_USER,
-      tls: false,
-      passwordRef: 'env:BACKMAIL_TEST_PASSWORD',
-    }
-
     const targetUrl = `imap://${IMAP_USER}:${IMAP_PASS}@${IMAP_HOST}:${IMAP_PORT}`
 
-    const result = await restoreAccount(accountConfig, tmpRepo, targetUrl, undefined, {
+    await restoreAccount(tmpRepo, targetUrl, undefined, {
       skipDuplicates: false,
       dryRun: false,
       verbose: false,
@@ -350,17 +302,9 @@ describe('REST-04: Folder structure preserved on target', () => {
 
 describe('Error handling during restore', () => {
   it('restoreAccount() returns result with uploaded, skipped, and errors counts', async () => {
-    const accountConfig = {
-      host: IMAP_HOST,
-      port: IMAP_PORT,
-      username: IMAP_USER,
-      tls: false,
-      passwordRef: 'env:BACKMAIL_TEST_PASSWORD',
-    }
-
     const targetUrl = `imap://${IMAP_USER}:${IMAP_PASS}@${IMAP_HOST}:${IMAP_PORT}`
 
-    const result = await restoreAccount(accountConfig, tmpRepo, targetUrl, undefined, {
+    const result = await restoreAccount(tmpRepo, targetUrl, undefined, {
       skipDuplicates: false,
       dryRun: false,
       verbose: false,
@@ -375,20 +319,12 @@ describe('Error handling during restore', () => {
   })
 
   it('restoreAccount() can be called with a dateOrCommit argument to restore from a specific point in history', async () => {
-    const accountConfig = {
-      host: IMAP_HOST,
-      port: IMAP_PORT,
-      username: IMAP_USER,
-      tls: false,
-      passwordRef: 'env:BACKMAIL_TEST_PASSWORD',
-    }
-
     const targetUrl = `imap://${IMAP_USER}:${IMAP_PASS}@${IMAP_HOST}:${IMAP_PORT}`
 
     // Get the initial commit hash
     const commitHash = execSync('git rev-parse HEAD', { cwd: tmpRepo }).toString().trim()
 
-    const result = await restoreAccount(accountConfig, tmpRepo, targetUrl, commitHash, {
+    const result = await restoreAccount(tmpRepo, targetUrl, commitHash, {
       skipDuplicates: false,
       dryRun: false,
       verbose: false,
