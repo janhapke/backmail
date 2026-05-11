@@ -73,10 +73,12 @@ program
       const archivePath = path.join(repoRoot, 'archive')
       const config = loadRepositoryConfig(repoRoot)
 
+      const verbose = opts.verbose ?? false
       const result = await syncAccount(config, archivePath, {
         excludeFolders: opts.excludeFolder,
         onlyFolders: opts.onlyFolder,
-        verbose: opts.verbose ?? false,
+        verbose,
+        onLog: verbose ? (msg) => console.log(msg) : undefined,
       })
 
       if (result.repoInitialized) {
@@ -84,12 +86,10 @@ program
       }
       const partialTag = result.partial ? ' [partial]' : ''
       console.log(`sync${partialTag}: +${result.added} added / -${result.removed} removed`)
-      // Per-folder error surfacing (verbose or error-only)
+      // Per-folder error surfacing
       for (const fr of result.folderResults) {
         if (fr.error) {
           console.error(`folder ${fr.path} failed: ${fr.error.message}`)
-        } else if (opts.verbose) {
-          console.log(`${fr.path}: +${fr.added} / -${fr.removed}`)
         }
       }
 

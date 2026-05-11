@@ -12,6 +12,7 @@ export interface SyncOptions {
   excludeFolders: string[]
   onlyFolders: string[]
   verbose: boolean
+  onLog?: (msg: string) => void
 }
 
 export interface FolderSyncResult {
@@ -193,17 +194,24 @@ export async function syncAccount(
   let partial = false
   const folderResults: FolderSyncResult[] = []
 
+  const log = opts.verbose ? (opts.onLog ?? (() => {})) : () => {}
+
   try {
+    log(`Connecting to ${config.host}:${config.port}...`)
     await client.connect()
+    log(`Connected.`)
 
     // List folders
+    log(`Listing folders...`)
     const rawFolders = await client.list()
     const folders = filterFolders(rawFolders, opts.onlyFolders, opts.excludeFolders)
+    log(`Found ${folders.length} folder(s): ${folders.map((f) => f.path).join(', ')}`)
 
     // Sync each folder
     for (const folder of folders) {
+      log(`Syncing folder: ${folder.path}`)
       try {
-        const folderResult = await syncFolder(client, folder, repoPath, opts.verbose)
+        const folderResult = await syncFolder(client, folder, repoPath, log)
         added += folderResult.added
         removed += folderResult.removed
         folderResults.push(folderResult)
@@ -251,7 +259,7 @@ async function syncFolder(
   client: InstanceType<typeof ImapFlow>,
   folder: { path: string; delimiter: string; flags: Set<string> },
   repoPath: string,
-  verbose: boolean,
+  log: (msg: string) => void,
 ): Promise<FolderSyncResult> {
   const folderFilename = folderPathToFilename(folder.path)
   const folderJsonPath = path.join(repoPath, 'folders', `${folderFilename}.json`)
@@ -277,6 +285,7 @@ async function syncFolder(
     }
     const serverValidity = client.mailbox.uidValidity ?? 0n // Fallback if undefined
     const serverUidNext = client.mailbox.uidNext ?? 0
+    log(`  ${folder.path}: ${client.mailbox.exists ?? 0} message(s) on server`)
 
     // uidvalidity change triggers a full re-sync of the folder
     if (storedState) {
@@ -313,6 +322,7 @@ async function syncFolder(
     // Fetch new messages
     const newMessages: FolderMessage[] = []
     if (hasNewMessages) {
+      log(`  ${folder.path}: downloading new messages (UID ${range})...`)
       for await (const msg of client.fetch(range, { uid: true, source: true, envelope: true, flags: true }, { uid: true })) {
         const rawId = msg.envelope?.messageId ?? `no-message-id_uid-${msg.uid}_${folderFilename}`
         const safeId = sanitizeMessageId(rawId)
@@ -327,8 +337,11 @@ async function syncFolder(
           flags: msgFlags,
         })
 
+        log(`  ↓ ${rawId}`)
         added++
       }
+    } else {
+      log(`  ${folder.path}: up to date`)
     }
 
     // Detect deletions by comparing current server UIDs against stored state
@@ -345,6 +358,10 @@ async function syncFolder(
       await fs.unlink(msgPath).catch(() => {})
     }
     removed += removedMessages.length
+
+    if (removedMessages.length > 0) {
+      log(`  ${folder.path}: removed ${removedMessages.length} deleted message(s)`)
+    }
 
     // Write updated folder state
     const updatedState: FolderState = {
