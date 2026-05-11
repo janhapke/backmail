@@ -5,7 +5,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { simpleGit } from 'simple-git'
 import { simpleParser } from 'mailparser'
-import { sanitizeMessageId, folderPathToFilename } from './sync.js'
+import { folderPathToFilename } from './sync.js'
 
 // ── Type Definitions ──────────────────────────────────────────────────────────
 
@@ -176,6 +176,7 @@ export async function listFolders(repoPath: string): Promise<string[]> {
 interface FolderMessage {
   uid: number
   'message-id': string
+  filename: string
   flags: string[]
 }
 
@@ -216,8 +217,7 @@ export async function listMessages(
   // For each message, read headers and create summary
   const summaries: MessageSummary[] = []
   for (const msg of state.messages) {
-    const sanitized = sanitizeMessageId(msg['message-id'])
-    const emlPath = path.join(repoPath, 'messages', `${sanitized}.eml`)
+    const emlPath = path.join(repoPath, 'messages', `${msg.filename}.eml`)
 
     try {
       const headers = await readEmlHeaders(emlPath)
@@ -255,19 +255,21 @@ export async function listMessages(
  */
 export async function viewMessage(
   repoPath: string,
-  messageId: string,
+  filename: string,
   format: 'eml' | 'plaintext' | 'json' = 'plaintext'
 ): Promise<string | Record<string, unknown>> {
-  // Sanitize before constructing path to prevent directory traversal
-  const sanitized = sanitizeMessageId(messageId)
-  const emlPath = path.join(repoPath, 'messages', `${sanitized}.eml`)
+  // Strip .eml extension if the caller passed the full filename
+  const stem = filename.endsWith('.eml') ? filename.slice(0, -4) : filename
+  // Reject any path separators to prevent directory traversal
+  if (/[/\\]/.test(stem)) throw new Error(`Invalid filename: ${filename}`)
+  const emlPath = path.join(repoPath, 'messages', `${stem}.eml`)
 
   // Read the EML file
   let emlBuffer: Buffer
   try {
     emlBuffer = await fs.readFile(emlPath)
   } catch {
-    throw new Error(`Message not found: ${messageId}`)
+    throw new Error(`Message not found: ${filename}`)
   }
 
   // Handle different formats

@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
 import { execSync } from 'node:child_process'
-import { sanitizeMessageId, folderPathToFilename } from '../../src/core/sync.js'
+import { folderPathToFilename } from '../../src/core/sync.js'
 
 let tmpDir: string
 let tmpRepo: string
@@ -53,8 +53,8 @@ beforeAll(async () => {
     uidvalidity: '1234567890',
     uidnext: 3,
     messages: [
-      { uid: 1, 'message-id': '<msg1@example.com>', flags: [] },
-      { uid: 2, 'message-id': '<msg2@example.com>', flags: ['\\Seen'] },
+      { uid: 1, 'message-id': '<msg1@example.com>', filename: 'fixture-msg1', flags: [] },
+      { uid: 2, 'message-id': '<msg2@example.com>', filename: 'fixture-msg2', flags: ['\\Seen'] },
     ],
   }
   await fs.writeFile(path.join(tmpRepo, 'folders', 'INBOX.json'), JSON.stringify(inboxState))
@@ -76,14 +76,8 @@ Message-ID: <msg2@example.com>
 
 This is the body of the second email.`
 
-  await fs.writeFile(
-    path.join(tmpRepo, 'messages', `${sanitizeMessageId('<msg1@example.com>')}.eml`),
-    eml1
-  )
-  await fs.writeFile(
-    path.join(tmpRepo, 'messages', `${sanitizeMessageId('<msg2@example.com>')}.eml`),
-    eml2
-  )
+  await fs.writeFile(path.join(tmpRepo, 'messages', 'fixture-msg1.eml'), eml1)
+  await fs.writeFile(path.join(tmpRepo, 'messages', 'fixture-msg2.eml'), eml2)
 
   // Create initial commit
   execSync('touch README.md', { cwd: tmpRepo })
@@ -257,7 +251,7 @@ describe('CLI Browse Commands', () => {
     it('returns raw EML with --format eml', async () => {
       const { viewMessage } = await import('../../src/core/browse.js')
 
-      const result = await viewMessage(tmpRepo, '<msg1@example.com>', 'eml')
+      const result = await viewMessage(tmpRepo, 'fixture-msg1', 'eml')
 
       expect(typeof result).toBe('string')
       expect(result).toContain('From: alice@example.com')
@@ -267,7 +261,7 @@ describe('CLI Browse Commands', () => {
     it('returns plaintext with default format', async () => {
       const { viewMessage } = await import('../../src/core/browse.js')
 
-      const result = await viewMessage(tmpRepo, '<msg1@example.com>', 'plaintext')
+      const result = await viewMessage(tmpRepo, 'fixture-msg1', 'plaintext')
 
       expect(typeof result).toBe('string')
       expect(result).toContain('This is the body of the first email')
@@ -276,7 +270,7 @@ describe('CLI Browse Commands', () => {
     it('returns plaintext explicitly', async () => {
       const { viewMessage } = await import('../../src/core/browse.js')
 
-      const result = await viewMessage(tmpRepo, '<msg2@example.com>', 'plaintext')
+      const result = await viewMessage(tmpRepo, 'fixture-msg2', 'plaintext')
 
       expect(typeof result).toBe('string')
       expect(result).toContain('This is the body of the second email')
@@ -285,7 +279,7 @@ describe('CLI Browse Commands', () => {
     it('returns JSON with headers and parts', async () => {
       const { viewMessage } = await import('../../src/core/browse.js')
 
-      const result = await viewMessage(tmpRepo, '<msg1@example.com>', 'json')
+      const result = await viewMessage(tmpRepo, 'fixture-msg1', 'json')
 
       // Result should be an object with headers and parts
       expect(typeof result).toBe('object')
@@ -296,7 +290,7 @@ describe('CLI Browse Commands', () => {
     it('defaults to plaintext format', async () => {
       const { viewMessage } = await import('../../src/core/browse.js')
 
-      const result = await viewMessage(tmpRepo, '<msg1@example.com>', 'plaintext')
+      const result = await viewMessage(tmpRepo, 'fixture-msg1', 'plaintext')
 
       expect(typeof result).toBe('string')
       expect(result).toContain('This is the body of the first email')

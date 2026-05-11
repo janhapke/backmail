@@ -1,8 +1,10 @@
 // src/core/sync.ts — no exit calls, no console, no CLI imports.
+import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { ImapFlow } from 'imapflow'
 import { simpleGit } from 'simple-git'
+import slugify from 'slugify'
 import type { RepositoryConfig } from './config.js'
 import { getPasswordByRef } from './config.js'
 
@@ -35,6 +37,7 @@ export interface SyncResult {
 interface FolderMessage {
   uid: number
   'message-id': string
+  filename: string
   flags: string[]
 }
 
@@ -47,11 +50,16 @@ interface FolderState {
 
 // ── Helper Functions ─────────────────────────────────────────────────────────
 
+// Windows reserved device names that cannot be used as filenames (even with an extension).
+const WINDOWS_RESERVED_NAMES = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i
+
 /**
  * Sanitize Message-ID to make it filesystem-safe.
  * - Strip angle brackets
+ * - Replace null bytes (OS-level rejection risk)
  * - Replace unsafe characters with underscore
  * - Replace .. with __ (prevent relative path traversal)
+ * - Prefix Windows reserved device names (CON, NUL, COM1…, LPT1…) with underscore
  * - Truncate to 200 chars
  */
 export function sanitizeMessageId(messageId: string): string {
@@ -59,13 +67,79 @@ export function sanitizeMessageId(messageId: string): string {
   let result = messageId
   // Strip angle brackets
   result = result.replace(/^<|>$/g, '')
+  // Remove null bytes
+  result = result.replace(/\0/g, '')
   // Replace filesystem-unsafe characters with underscore
   result = result.replace(/[/\\:*?"<>|]/g, '_')
   // Replace .. with __ to prevent relative path traversal
   result = result.replace(/\.\./g, '__')
-  // Truncate to 200 chars
+  // Truncate to 200 chars before reserved-name check so the check sees the final stem
   result = result.substring(0, 200)
+  // Prefix Windows reserved device names to prevent creation failures on Windows
+  if (WINDOWS_RESERVED_NAMES.test(result)) result = `_${result}`
   return result
+}
+
+// Decode RFC 2047 encoded-words in email header values (=?charset?B/Q?...?=)
+function decodeMimeWords(value: string): string {
+  return value.replace(/=\?([^?]+)\?([BQbq])\?([^?]*)\?=/g, (_, _charset, encoding, encoded) => {
+    try {
+      if (encoding.toUpperCase() === 'B') return Buffer.from(encoded, 'base64').toString('utf-8')
+      return encoded.replace(/_/g, ' ').replace(/=([0-9A-Fa-f]{2})/g, (_m: string, hex: string) => String.fromCharCode(parseInt(hex, 16)))
+    } catch {
+      return encoded
+    }
+  })
+}
+
+// Extract the first occurrence of a named header from the raw (unfolded) header block.
+function extractRawHeader(unfolded: string, name: string): string {
+  const re = new RegExp(`^${name}:[ \\t]*(.*)$`, 'im')
+  return unfolded.match(re)?.[1]?.trim() ?? ''
+}
+
+// Unfold and extract just the header section from raw email bytes.
+function parseHeaderBlock(rawSource: Buffer | string): string {
+  const text = typeof rawSource === 'string'
+    ? rawSource.slice(0, 8192)
+    : rawSource.subarray(0, 8192).toString('utf-8')
+  const headerSection = text.split(/\r?\n\r?\n/)[0] ?? text
+  return headerSection.replace(/\r?\n([ \t])/g, ' ')
+}
+
+/**
+ * Generate a human-readable, collision-resistant filename stem for a message.
+ * Format: YYYY-MM-DD_<subject-slug-30chars>_<sha1-of-message-id-8chars>
+ *
+ * - Date: extracted from the topmost Received: header (most-recent delivery stamp).
+ *   Falls back to 0000-00-00 when absent or unparseable.
+ * - Subject: RFC 2047-decoded, slugified, truncated to 30 chars.
+ *   Falls back to "no-subject" when empty.
+ * - SHA1: first 8 hex chars of SHA1(rawMessageId) — ensures global uniqueness.
+ */
+export function messageFilename(rawMessageId: string, rawSource: Buffer | string): string {
+  const sha1 = crypto.createHash('sha1').update(rawMessageId).digest('hex').slice(0, 8)
+
+  const unfolded = parseHeaderBlock(rawSource)
+
+  // Date from topmost Received: header (semicolon-delimited timestamp at end)
+  let dateStr = '0000-00-00'
+  const receivedLine = extractRawHeader(unfolded, 'received')
+  if (receivedLine) {
+    const semi = receivedLine.lastIndexOf(';')
+    if (semi !== -1) {
+      const parsed = new Date(receivedLine.slice(semi + 1).trim())
+      if (!isNaN(parsed.getTime())) dateStr = parsed.toISOString().slice(0, 10)
+    }
+  }
+
+  // Subject: decode MIME words, slugify, truncate
+  const rawSubject = decodeMimeWords(extractRawHeader(unfolded, 'subject'))
+  const slug = rawSubject
+    ? (slugify(rawSubject, { lower: true, strict: true }).slice(0, 30).replace(/-+$/, '') || 'no-subject')
+    : 'no-subject'
+
+  return `${dateStr}_${slug}_${sha1}`
 }
 
 /**
@@ -297,8 +371,7 @@ async function syncFolder(
         // Delete all stored messages and treat as a fresh sync.
         if (storedState.messages.length > 0) {
           for (const msg of storedState.messages) {
-            const safeId = sanitizeMessageId(msg['message-id'])
-            const msgPath = path.join(repoPath, 'messages', `${safeId}.eml`)
+            const msgPath = path.join(repoPath, 'messages', `${msg.filename}.eml`)
             await fs.unlink(msgPath).catch(() => {})
           }
           removed += storedState.messages.length
@@ -325,8 +398,8 @@ async function syncFolder(
       log(`  ${folder.path}: downloading new messages (UID ${range})...`)
       for await (const msg of client.fetch(range, { uid: true, source: true, envelope: true, flags: true }, { uid: true })) {
         const rawId = msg.envelope?.messageId ?? `no-message-id_uid-${msg.uid}_${folderFilename}`
-        const safeId = sanitizeMessageId(rawId)
-        const msgPath = path.join(repoPath, 'messages', `${safeId}.eml`)
+        const filename = messageFilename(rawId, msg.source as Buffer)
+        const msgPath = path.join(repoPath, 'messages', `${filename}.eml`)
 
         await fs.writeFile(msgPath, msg.source as Buffer)
 
@@ -334,6 +407,7 @@ async function syncFolder(
         newMessages.push({
           uid: msg.uid,
           'message-id': rawId,
+          filename,
           flags: msgFlags,
         })
 
@@ -353,8 +427,7 @@ async function syncFolder(
 
     // Delete .eml files for removed messages
     for (const msg of removedMessages) {
-      const safeId = sanitizeMessageId(msg['message-id'])
-      const msgPath = path.join(repoPath, 'messages', `${safeId}.eml`)
+      const msgPath = path.join(repoPath, 'messages', `${msg.filename}.eml`)
       await fs.unlink(msgPath).catch(() => {})
     }
     removed += removedMessages.length

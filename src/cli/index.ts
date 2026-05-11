@@ -168,15 +168,15 @@ program
 
 // ── view ────────────────────────────────────────────────────────────────────
 program
-  .command('view <message-id>')
-  .description('View an email message')
+  .command('view <filename>')
+  .description('View an email message (pass the filename stem from the messages/ directory, e.g. 2025-05-08_hello-world_a1b2c3d4)')
   .option('--format <fmt>', 'output format: eml, plaintext, json', 'plaintext')
-  .action(async (messageId: string, opts: { format: string }) => {
+  .action(async (filename: string, opts: { format: string }) => {
     try {
       const repoRoot = getRepoRoot()
       const archivePath = path.join(repoRoot, 'archive')
       const format = opts.format as 'eml' | 'plaintext' | 'json'
-      const result = await viewMessage(archivePath, messageId, format)
+      const result = await viewMessage(archivePath, filename, format)
       if (format === 'json') {
         console.log(JSON.stringify(result, null, 2))
       } else {

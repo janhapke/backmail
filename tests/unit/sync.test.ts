@@ -9,6 +9,7 @@ import {
   syncAccount,
   ensureRepo,
   sanitizeMessageId,
+  messageFilename,
   folderPathToFilename,
   formatCommitMessage,
   filterFolders,
@@ -78,6 +79,86 @@ describe('sanitizeMessageId (T-3-01: path traversal)', () => {
       const result = sanitizeMessageId(input)
       expect(result).not.toContain(char)
     }
+  })
+
+  it('Test F: removes null bytes', () => {
+    const result = sanitizeMessageId('abc\x00def@example.com')
+    expect(result).not.toContain('\x00')
+    expect(result).toBe('abcdef@example.com')
+  })
+
+  it('Test G: prefixes Windows reserved device names', () => {
+    const reserved = ['CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM9', 'LPT1', 'LPT9']
+    for (const name of reserved) {
+      expect(sanitizeMessageId(name)).toBe(`_${name}`)
+      expect(sanitizeMessageId(name.toLowerCase())).toBe(`_${name.toLowerCase()}`)
+    }
+  })
+
+  it('Test H: does not prefix non-reserved names that share a prefix', () => {
+    expect(sanitizeMessageId('CONSOLE')).toBe('CONSOLE')
+    expect(sanitizeMessageId('NULL')).toBe('NULL')
+    expect(sanitizeMessageId('COM10')).toBe('COM10')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// messageFilename
+// ---------------------------------------------------------------------------
+
+describe('messageFilename', () => {
+  it('returns YYYY-MM-DD_slug_sha1 for a well-formed message', () => {
+    const source = [
+      'Received: from mail.example.com by mx.example.com; Thu, 08 May 2025 12:34:56 +0000',
+      'Subject: Hello World',
+      '',
+      'body',
+    ].join('\r\n')
+    const result = messageFilename('<abc@example.com>', source)
+    expect(result).toMatch(/^2025-05-08_hello-world_[0-9a-f]{8}$/)
+  })
+
+  it('falls back to 0000-00-00 when no Received header is present', () => {
+    const result = messageFilename('<abc@example.com>', 'Subject: Hi\r\n\r\nbody')
+    expect(result).toMatch(/^0000-00-00_hi_[0-9a-f]{8}$/)
+  })
+
+  it('falls back to no-subject when Subject header is absent', () => {
+    const source = 'Received: from x; Thu, 08 May 2025 12:00:00 +0000\r\n\r\nbody'
+    const result = messageFilename('<abc@example.com>', source)
+    expect(result).toMatch(/^2025-05-08_no-subject_[0-9a-f]{8}$/)
+  })
+
+  it('falls back to no-subject when Subject is empty', () => {
+    const result = messageFilename('<abc@example.com>', 'Subject:   \r\n\r\nbody')
+    expect(result).toMatch(/^0000-00-00_no-subject_[0-9a-f]{8}$/)
+  })
+
+  it('truncates slug to 30 characters', () => {
+    const longSubject = 'Subject: ' + 'very long subject line that goes on and on and on'
+    const result = messageFilename('<abc@example.com>', longSubject + '\r\n\r\nbody')
+    const slug = result.split('_')[1]
+    expect(slug!.length).toBeLessThanOrEqual(30)
+  })
+
+  it('sha1 suffix differs for different message IDs', () => {
+    const source = 'Subject: Same\r\n\r\nbody'
+    const a = messageFilename('<a@example.com>', source)
+    const b = messageFilename('<b@example.com>', source)
+    expect(a.split('_').at(-1)).not.toBe(b.split('_').at(-1))
+  })
+
+  it('is deterministic — same inputs always produce same output', () => {
+    const source = 'Subject: Test\r\n\r\nbody'
+    const id = '<test@example.com>'
+    expect(messageFilename(id, source)).toBe(messageFilename(id, source))
+  })
+
+  it('decodes MIME-encoded subject words', () => {
+    // =?UTF-8?B?SGVsbG8=?= decodes to "Hello"
+    const source = 'Subject: =?UTF-8?B?SGVsbG8=?=\r\n\r\nbody'
+    const result = messageFilename('<abc@example.com>', source)
+    expect(result).toMatch(/^0000-00-00_hello_[0-9a-f]{8}$/)
   })
 })
 
@@ -225,10 +306,10 @@ describe('SYNC-01: uidNext guard', () => {
       folderPath: 'INBOX',
       uidvalidity: '1',
       uidnext: 6,
-      messages: [{ uid: 5, 'message-id': '<existing@example.com>', flags: [] }],
+      messages: [{ uid: 5, 'message-id': '<existing@example.com>', filename: 'fixture-existing', flags: [] }],
     }
     fs.writeFileSync(path.join(tmpDir, 'folders', 'INBOX.json'), JSON.stringify(storedState))
-    fs.writeFileSync(path.join(tmpDir, 'messages', 'existing@example.com.eml'), 'dummy')
+    fs.writeFileSync(path.join(tmpDir, 'messages', 'fixture-existing.eml'), 'dummy')
 
     const fetchMock = vi.fn().mockImplementation(async function* () {})
     vi.mocked(ImapFlow).mockImplementationOnce(function () {
@@ -258,10 +339,10 @@ describe('SYNC-01: uidNext guard', () => {
       folderPath: 'INBOX',
       uidvalidity: '1',
       uidnext: 6,
-      messages: [{ uid: 5, 'message-id': '<existing@example.com>', flags: [] }],
+      messages: [{ uid: 5, 'message-id': '<existing@example.com>', filename: 'fixture-existing', flags: [] }],
     }
     fs.writeFileSync(path.join(tmpDir, 'folders', 'INBOX.json'), JSON.stringify(storedState))
-    fs.writeFileSync(path.join(tmpDir, 'messages', 'existing@example.com.eml'), 'dummy')
+    fs.writeFileSync(path.join(tmpDir, 'messages', 'fixture-existing.eml'), 'dummy')
 
     const fetchMock = vi.fn().mockImplementation(async function* () {
       yield {
@@ -318,13 +399,13 @@ describe('SYNC-05: uidvalidity change triggers full wipe and re-sync', () => {
       uidvalidity: '1',   // server will report '2' → mismatch
       uidnext: 3,
       messages: [
-        { uid: 1, 'message-id': '<old1@example.com>', flags: [] },
-        { uid: 2, 'message-id': '<old2@example.com>', flags: [] },
+        { uid: 1, 'message-id': '<old1@example.com>', filename: 'fixture-old1', flags: [] },
+        { uid: 2, 'message-id': '<old2@example.com>', filename: 'fixture-old2', flags: [] },
       ],
     }
     fs.writeFileSync(path.join(tmpDir, 'folders', 'INBOX.json'), JSON.stringify(storedState))
-    fs.writeFileSync(path.join(tmpDir, 'messages', 'old1@example.com.eml'), 'old email 1')
-    fs.writeFileSync(path.join(tmpDir, 'messages', 'old2@example.com.eml'), 'old email 2')
+    fs.writeFileSync(path.join(tmpDir, 'messages', 'fixture-old1.eml'), 'old email 1')
+    fs.writeFileSync(path.join(tmpDir, 'messages', 'fixture-old2.eml'), 'old email 2')
 
     vi.mocked(ImapFlow).mockImplementationOnce(function () {
       return {
@@ -346,8 +427,8 @@ describe('SYNC-05: uidvalidity change triggers full wipe and re-sync', () => {
 
     expect(result.removed).toBe(2)
     expect(result.added).toBe(0)
-    expect(fs.existsSync(path.join(tmpDir, 'messages', 'old1@example.com.eml'))).toBe(false)
-    expect(fs.existsSync(path.join(tmpDir, 'messages', 'old2@example.com.eml'))).toBe(false)
+    expect(fs.existsSync(path.join(tmpDir, 'messages', 'fixture-old1.eml'))).toBe(false)
+    expect(fs.existsSync(path.join(tmpDir, 'messages', 'fixture-old2.eml'))).toBe(false)
   })
 
   it('fetches all messages from scratch after a uidvalidity change', async () => {
@@ -355,10 +436,10 @@ describe('SYNC-05: uidvalidity change triggers full wipe and re-sync', () => {
       folderPath: 'INBOX',
       uidvalidity: '1',
       uidnext: 2,
-      messages: [{ uid: 1, 'message-id': '<stale@example.com>', flags: [] }],
+      messages: [{ uid: 1, 'message-id': '<stale@example.com>', filename: 'fixture-stale', flags: [] }],
     }
     fs.writeFileSync(path.join(tmpDir, 'folders', 'INBOX.json'), JSON.stringify(storedState))
-    fs.writeFileSync(path.join(tmpDir, 'messages', 'stale@example.com.eml'), 'stale')
+    fs.writeFileSync(path.join(tmpDir, 'messages', 'fixture-stale.eml'), 'stale')
 
     const fetchMock = vi.fn().mockImplementation(async function* () {
       yield {
@@ -417,15 +498,15 @@ describe('SYNC-06: message deletion removes local .eml files', () => {
       uidvalidity: '1',
       uidnext: 4,
       messages: [
-        { uid: 1, 'message-id': '<keep1@example.com>', flags: [] },
-        { uid: 2, 'message-id': '<keep2@example.com>', flags: [] },
-        { uid: 3, 'message-id': '<deleted@example.com>', flags: [] },
+        { uid: 1, 'message-id': '<keep1@example.com>', filename: 'fixture-keep1', flags: [] },
+        { uid: 2, 'message-id': '<keep2@example.com>', filename: 'fixture-keep2', flags: [] },
+        { uid: 3, 'message-id': '<deleted@example.com>', filename: 'fixture-deleted', flags: [] },
       ],
     }
     fs.writeFileSync(path.join(tmpDir, 'folders', 'INBOX.json'), JSON.stringify(storedState))
-    fs.writeFileSync(path.join(tmpDir, 'messages', 'keep1@example.com.eml'), 'keep')
-    fs.writeFileSync(path.join(tmpDir, 'messages', 'keep2@example.com.eml'), 'keep')
-    fs.writeFileSync(path.join(tmpDir, 'messages', 'deleted@example.com.eml'), 'deleted')
+    fs.writeFileSync(path.join(tmpDir, 'messages', 'fixture-keep1.eml'), 'keep')
+    fs.writeFileSync(path.join(tmpDir, 'messages', 'fixture-keep2.eml'), 'keep')
+    fs.writeFileSync(path.join(tmpDir, 'messages', 'fixture-deleted.eml'), 'deleted')
 
     vi.mocked(ImapFlow).mockImplementationOnce(function () {
       return {
@@ -446,9 +527,9 @@ describe('SYNC-06: message deletion removes local .eml files', () => {
     )
 
     expect(result.removed).toBe(1)
-    expect(fs.existsSync(path.join(tmpDir, 'messages', 'deleted@example.com.eml'))).toBe(false)
-    expect(fs.existsSync(path.join(tmpDir, 'messages', 'keep1@example.com.eml'))).toBe(true)
-    expect(fs.existsSync(path.join(tmpDir, 'messages', 'keep2@example.com.eml'))).toBe(true)
+    expect(fs.existsSync(path.join(tmpDir, 'messages', 'fixture-deleted.eml'))).toBe(false)
+    expect(fs.existsSync(path.join(tmpDir, 'messages', 'fixture-keep1.eml'))).toBe(true)
+    expect(fs.existsSync(path.join(tmpDir, 'messages', 'fixture-keep2.eml'))).toBe(true)
   })
 
   it('removes multiple deleted messages and updates result.removed correctly', async () => {
@@ -457,15 +538,15 @@ describe('SYNC-06: message deletion removes local .eml files', () => {
       uidvalidity: '1',
       uidnext: 5,
       messages: [
-        { uid: 1, 'message-id': '<a@example.com>', flags: [] },
-        { uid: 2, 'message-id': '<b@example.com>', flags: [] },
-        { uid: 3, 'message-id': '<c@example.com>', flags: [] },
-        { uid: 4, 'message-id': '<d@example.com>', flags: [] },
+        { uid: 1, 'message-id': '<a@example.com>', filename: 'fixture-a', flags: [] },
+        { uid: 2, 'message-id': '<b@example.com>', filename: 'fixture-b', flags: [] },
+        { uid: 3, 'message-id': '<c@example.com>', filename: 'fixture-c', flags: [] },
+        { uid: 4, 'message-id': '<d@example.com>', filename: 'fixture-d', flags: [] },
       ],
     }
     fs.writeFileSync(path.join(tmpDir, 'folders', 'INBOX.json'), JSON.stringify(storedState))
     for (const id of ['a', 'b', 'c', 'd']) {
-      fs.writeFileSync(path.join(tmpDir, 'messages', `${id}@example.com.eml`), 'content')
+      fs.writeFileSync(path.join(tmpDir, 'messages', `fixture-${id}.eml`), 'content')
     }
 
     vi.mocked(ImapFlow).mockImplementationOnce(function () {
@@ -487,10 +568,10 @@ describe('SYNC-06: message deletion removes local .eml files', () => {
     )
 
     expect(result.removed).toBe(3)
-    expect(fs.existsSync(path.join(tmpDir, 'messages', 'a@example.com.eml'))).toBe(true)
-    expect(fs.existsSync(path.join(tmpDir, 'messages', 'b@example.com.eml'))).toBe(false)
-    expect(fs.existsSync(path.join(tmpDir, 'messages', 'c@example.com.eml'))).toBe(false)
-    expect(fs.existsSync(path.join(tmpDir, 'messages', 'd@example.com.eml'))).toBe(false)
+    expect(fs.existsSync(path.join(tmpDir, 'messages', 'fixture-a.eml'))).toBe(true)
+    expect(fs.existsSync(path.join(tmpDir, 'messages', 'fixture-b.eml'))).toBe(false)
+    expect(fs.existsSync(path.join(tmpDir, 'messages', 'fixture-c.eml'))).toBe(false)
+    expect(fs.existsSync(path.join(tmpDir, 'messages', 'fixture-d.eml'))).toBe(false)
   })
 })
 

@@ -10,7 +10,6 @@ import {
   listMessages,
   viewMessage,
 } from '../../src/core/browse.js'
-import { sanitizeMessageId } from '../../src/core/sync.js'
 
 // ── getLog Tests ──────────────────────────────────────────────────────────────
 
@@ -196,8 +195,8 @@ describe('listMessages', () => {
         uidvalidity: '1',
         uidnext: 3,
         messages: [
-          { uid: 1, 'message-id': msgId1, flags: [] },
-          { uid: 2, 'message-id': msgId2, flags: [] },
+          { uid: 1, 'message-id': msgId1, filename: 'fixture-msg1', flags: [] },
+          { uid: 2, 'message-id': msgId2, filename: 'fixture-msg2', flags: [] },
         ],
       })
     )
@@ -216,9 +215,8 @@ Date: Tue, 02 Jan 2024 13:00:00 +0000
 
 Body 2`
 
-    // Use sanitized filenames
-    await fs.writeFile(path.join(messagesPath, `${sanitizeMessageId(msgId1)}.eml`), eml1)
-    await fs.writeFile(path.join(messagesPath, `${sanitizeMessageId(msgId2)}.eml`), eml2)
+    await fs.writeFile(path.join(messagesPath, 'fixture-msg1.eml'), eml1)
+    await fs.writeFile(path.join(messagesPath, 'fixture-msg2.eml'), eml2)
 
     const result = await listMessages(tempDir, 'INBOX')
     expect(result).toHaveLength(2)
@@ -249,7 +247,7 @@ Body 2`
       JSON.stringify({
         uidvalidity: '1',
         uidnext: 2,
-        messages: [{ uid: 1, 'message-id': '<missing@example.com>', flags: [] }],
+        messages: [{ uid: 1, 'message-id': '<missing@example.com>', filename: 'fixture-missing', flags: [] }],
       })
     )
 
@@ -282,16 +280,15 @@ describe('viewMessage', () => {
     const messagesPath = path.join(tempDir, 'messages')
     await fs.mkdir(messagesPath)
 
-    const msgId = '<test@example.com>'
     const rawEml = `From: test@example.com
 Subject: Test
 Date: Mon, 01 Jan 2024 12:00:00 +0000
 
 This is the body`
 
-    await fs.writeFile(path.join(messagesPath, `${sanitizeMessageId(msgId)}.eml`), rawEml)
+    await fs.writeFile(path.join(messagesPath, 'fixture-test.eml'), rawEml)
 
-    const result = await viewMessage(tempDir, msgId, 'eml')
+    const result = await viewMessage(tempDir, 'fixture-test', 'eml')
     expect(result).toContain('From: test@example.com')
     expect(result).toContain('This is the body')
   })
@@ -300,7 +297,6 @@ This is the body`
     const messagesPath = path.join(tempDir, 'messages')
     await fs.mkdir(messagesPath)
 
-    const msgId = '<test@example.com>'
     const eml = `From: test@example.com
 Subject: Test
 Date: Mon, 01 Jan 2024 12:00:00 +0000
@@ -308,9 +304,9 @@ Content-Type: text/plain
 
 This is plaintext`
 
-    await fs.writeFile(path.join(messagesPath, `${sanitizeMessageId(msgId)}.eml`), eml)
+    await fs.writeFile(path.join(messagesPath, 'fixture-test.eml'), eml)
 
-    const result = await viewMessage(tempDir, msgId, 'plaintext')
+    const result = await viewMessage(tempDir, 'fixture-test', 'plaintext')
     expect(result).toContain('This is plaintext')
   })
 
@@ -318,17 +314,16 @@ This is plaintext`
     const messagesPath = path.join(tempDir, 'messages')
     await fs.mkdir(messagesPath)
 
-    const msgId = '<test@example.com>'
     const eml = `From: test@example.com
 Subject: Test
 Content-Type: text/plain
 
 Default format text`
 
-    await fs.writeFile(path.join(messagesPath, `${sanitizeMessageId(msgId)}.eml`), eml)
+    await fs.writeFile(path.join(messagesPath, 'fixture-test.eml'), eml)
 
     // Call without format parameter (should default to plaintext)
-    const result = await viewMessage(tempDir, msgId)
+    const result = await viewMessage(tempDir, 'fixture-test')
     expect(result).toContain('Default format text')
   })
 
@@ -336,7 +331,6 @@ Default format text`
     const messagesPath = path.join(tempDir, 'messages')
     await fs.mkdir(messagesPath)
 
-    const msgId = '<test@example.com>'
     const eml = `From: test@example.com
 Subject: Test Subject
 To: recipient@example.com
@@ -345,9 +339,9 @@ Content-Type: text/plain
 
 This is plaintext`
 
-    await fs.writeFile(path.join(messagesPath, `${sanitizeMessageId(msgId)}.eml`), eml)
+    await fs.writeFile(path.join(messagesPath, 'fixture-test.eml'), eml)
 
-    const result = (await viewMessage(tempDir, msgId, 'json')) as Record<string, unknown>
+    const result = (await viewMessage(tempDir, 'fixture-test', 'json')) as Record<string, unknown>
     expect(result.headers).toBeDefined()
     expect(result.parts).toBeDefined()
     // from header might be an object or string depending on parsing
@@ -361,7 +355,6 @@ This is plaintext`
     const messagesPath = path.join(tempDir, 'messages')
     await fs.mkdir(messagesPath)
 
-    const msgId = '<test@example.com>'
     // Multipart message with only HTML and an attachment, no text/plain
     const eml = `From: test@example.com
 Subject: Test
@@ -380,29 +373,36 @@ Content-Transfer-Encoding: base64
 YmluYXJ5IGNvbnRlbnQ=
 --boundary123--`
 
-    await fs.writeFile(path.join(messagesPath, `${sanitizeMessageId(msgId)}.eml`), eml)
+    await fs.writeFile(path.join(messagesPath, 'fixture-test.eml'), eml)
 
     await expect(
-      viewMessage(tempDir, msgId, 'plaintext')
+      viewMessage(tempDir, 'fixture-test', 'plaintext')
     ).rejects.toThrow(/No text\/plain part found/)
   })
 
-  it('sanitizes message-id before path lookup', async () => {
+  it('strips .eml extension if caller passes the full filename', async () => {
     const messagesPath = path.join(tempDir, 'messages')
     await fs.mkdir(messagesPath)
 
-    const msgId = '<sanitized_id@test.com>'
     const eml = `From: test@example.com
 Subject: Test
 
 Body`
 
-    // Create file with sanitized name
-    await fs.writeFile(path.join(messagesPath, `${sanitizeMessageId(msgId)}.eml`), eml)
+    await fs.writeFile(path.join(messagesPath, 'fixture-test.eml'), eml)
 
-    // Call with message-id that needs sanitization (angle brackets)
-    const result = await viewMessage(tempDir, msgId, 'eml')
+    // Pass filename with .eml extension — should still resolve correctly
+    const result = await viewMessage(tempDir, 'fixture-test.eml', 'eml')
     expect(result).toContain('From: test@example.com')
+  })
+
+  it('rejects filenames containing path separators', async () => {
+    const messagesPath = path.join(tempDir, 'messages')
+    await fs.mkdir(messagesPath)
+
+    await expect(
+      viewMessage(tempDir, '../other/file', 'eml')
+    ).rejects.toThrow(/Invalid filename/)
   })
 
   it('throws for missing message file', async () => {
@@ -418,7 +418,6 @@ Body`
     const messagesPath = path.join(tempDir, 'messages')
     await fs.mkdir(messagesPath)
 
-    const msgId = '<html@example.com>'
     const eml = [
       'From: test@example.com',
       'Subject: HTML Email',
@@ -436,9 +435,9 @@ Body`
       '--b--',
     ].join('\r\n')
 
-    await fs.writeFile(path.join(messagesPath, `${sanitizeMessageId(msgId)}.eml`), eml)
+    await fs.writeFile(path.join(messagesPath, 'fixture-html.eml'), eml)
 
-    const result = await viewMessage(tempDir, msgId, 'json') as Record<string, unknown>
+    const result = await viewMessage(tempDir, 'fixture-html', 'json') as Record<string, unknown>
     const parts = result.parts as Array<{ type: string; content: string }>
     const htmlPart = parts.find(p => p.type === 'text/html')
     expect(htmlPart).toBeDefined()
@@ -449,7 +448,6 @@ Body`
     const messagesPath = path.join(tempDir, 'messages')
     await fs.mkdir(messagesPath)
 
-    const msgId = '<attachment@example.com>'
     const eml = [
       'From: test@example.com',
       'Subject: Attachment',
@@ -469,9 +467,9 @@ Body`
       '--b--',
     ].join('\r\n')
 
-    await fs.writeFile(path.join(messagesPath, `${sanitizeMessageId(msgId)}.eml`), eml)
+    await fs.writeFile(path.join(messagesPath, 'fixture-attachment.eml'), eml)
 
-    const result = await viewMessage(tempDir, msgId, 'json') as Record<string, unknown>
+    const result = await viewMessage(tempDir, 'fixture-attachment', 'json') as Record<string, unknown>
     const parts = result.parts as Array<{ type: string; content: string }>
     const attPart = parts.find(p => p.type === 'application/octet-stream')
     expect(attPart).toBeDefined()

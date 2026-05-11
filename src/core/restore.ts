@@ -3,7 +3,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { ImapFlow } from 'imapflow'
-import { sanitizeMessageId, folderPathToFilename } from './sync.js'
+import { folderPathToFilename } from './sync.js'
 import { checkoutCommit } from './browse.js'
 
 // ── Public Interfaces ────────────────────────────────────────────────────────
@@ -197,7 +197,7 @@ export async function restoreAccount(
       const folderFilename = folderPathToFilename(folderPath)
       const folderJsonPath = path.join(sourcePath, 'folders', `${folderFilename}.json`)
 
-      let folderState: { folderPath?: string; messages: Array<{ 'message-id': string }> }
+      let folderState: { folderPath?: string; messages: Array<{ 'message-id': string; filename: string }> }
       try {
         folderState = JSON.parse(await fs.readFile(folderJsonPath, 'utf-8'))
       } catch {
@@ -220,8 +220,7 @@ export async function restoreAccount(
             }
           }
 
-          const sanitized = sanitizeMessageId(messageId)
-          const emlPath = path.join(sourcePath, 'messages', `${sanitized}.eml`)
+          const emlPath = path.join(sourcePath, 'messages', `${msg.filename}.eml`)
           const content = await fs.readFile(emlPath)
 
           if (targetClient) {

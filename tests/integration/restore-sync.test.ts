@@ -4,7 +4,6 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
 import { execSync } from 'node:child_process'
-import { sanitizeMessageId } from '../../src/core/sync.js'
 import { restoreAccount } from '../../src/core/restore.js'
 
 // Allow override via env vars for CI environments that map ports differently
@@ -37,9 +36,9 @@ beforeAll(async () => {
     uidvalidity: '1234567890',
     uidnext: 6,
     messages: [
-      { uid: 1, 'message-id': '<msg1@example.com>', flags: [] },
-      { uid: 2, 'message-id': '<msg2@example.com>', flags: ['\\Seen'] },
-      { uid: 3, 'message-id': '<msg3@example.com>', flags: [] },
+      { uid: 1, 'message-id': '<msg1@example.com>', filename: 'fixture-msg1', flags: [] },
+      { uid: 2, 'message-id': '<msg2@example.com>', filename: 'fixture-msg2', flags: ['\\Seen'] },
+      { uid: 3, 'message-id': '<msg3@example.com>', filename: 'fixture-msg3', flags: [] },
     ],
   }
   await fs.writeFile(
@@ -72,18 +71,9 @@ Message-ID: <msg3@example.com>
 
 This is the body of the third email.`
 
-  await fs.writeFile(
-    path.join(tmpRepo, 'messages', `${sanitizeMessageId('<msg1@example.com>')}.eml`),
-    eml1
-  )
-  await fs.writeFile(
-    path.join(tmpRepo, 'messages', `${sanitizeMessageId('<msg2@example.com>')}.eml`),
-    eml2
-  )
-  await fs.writeFile(
-    path.join(tmpRepo, 'messages', `${sanitizeMessageId('<msg3@example.com>')}.eml`),
-    eml3
-  )
+  await fs.writeFile(path.join(tmpRepo, 'messages', 'fixture-msg1.eml'), eml1)
+  await fs.writeFile(path.join(tmpRepo, 'messages', 'fixture-msg2.eml'), eml2)
+  await fs.writeFile(path.join(tmpRepo, 'messages', 'fixture-msg3.eml'), eml3)
 
   // Create initial commit
   execSync('touch README.md', { cwd: tmpRepo })
