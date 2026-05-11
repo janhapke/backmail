@@ -206,6 +206,26 @@ describe('REST-02: Duplicate checking with --skip-duplicates=yes', () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe('REST-03: Dry-run produces output without writing', () => {
+  beforeAll(async () => {
+    const cleaner = new ImapFlow({
+      host: IMAP_HOST,
+      port: IMAP_PORT,
+      secure: false,
+      auth: { user: IMAP_USER, pass: IMAP_PASS },
+      logger: false,
+    })
+    await cleaner.connect()
+    const lock = await cleaner.getMailboxLock('INBOX')
+    try {
+      await cleaner.messageDelete('1:*', { uid: false })
+    } catch {
+      // INBOX may already be empty
+    } finally {
+      lock.release()
+    }
+    await cleaner.logout().catch(() => {})
+  })
+
   it('dryRun=true produces same output format without writing to target', async () => {
     const targetUrl = `imap://${IMAP_USER}:${IMAP_PASS}@${IMAP_HOST}:${IMAP_PORT}`
 
