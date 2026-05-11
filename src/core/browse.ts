@@ -124,8 +124,8 @@ export async function checkoutCommit(
  */
 async function readEmlHeaders(emlPath: string): Promise<Record<string, string>> {
   const fd = await fs.open(emlPath, 'r')
-  const buf = Buffer.alloc(4096)
-  const { bytesRead } = await fd.read(buf, 0, 4096, 0)
+  const buf = Buffer.alloc(65536)
+  const { bytesRead } = await fd.read(buf, 0, 65536, 0)
   await fd.close()
 
   const raw = buf.subarray(0, bytesRead).toString('utf-8')
