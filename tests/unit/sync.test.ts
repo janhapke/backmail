@@ -118,7 +118,13 @@ describe('messageFilename', () => {
     expect(result).toMatch(/^2025-05-08_hello-world_[0-9a-f]{8}$/)
   })
 
-  it('falls back to 0000-00-00 when no Received header is present', () => {
+  it('falls back to Date: header when no Received header is present', () => {
+    const source = 'Date: Fri, 01 Mar 2024 09:00:00 +0000\r\nSubject: Hi\r\n\r\nbody'
+    const result = messageFilename('<abc@example.com>', source)
+    expect(result).toMatch(/^2024-03-01_hi_[0-9a-f]{8}$/)
+  })
+
+  it('falls back to 0000-00-00 when neither Received nor Date header is present', () => {
     const result = messageFilename('<abc@example.com>', 'Subject: Hi\r\n\r\nbody')
     expect(result).toMatch(/^0000-00-00_hi_[0-9a-f]{8}$/)
   })

@@ -112,7 +112,7 @@ function parseHeaderBlock(rawSource: Buffer | string): string {
  * Format: YYYY-MM-DD_<subject-slug-30chars>_<sha1-of-message-id-8chars>
  *
  * - Date: extracted from the topmost Received: header (most-recent delivery stamp).
- *   Falls back to 0000-00-00 when absent or unparseable.
+ *   Falls back to the Date: header (sent mails, drafts), then to 0000-00-00.
  * - Subject: RFC 2047-decoded, slugified, truncated to 30 chars.
  *   Falls back to "no-subject" when empty.
  * - SHA1: first 8 hex chars of SHA1(rawMessageId) — ensures global uniqueness.
@@ -122,13 +122,21 @@ export function messageFilename(rawMessageId: string, rawSource: Buffer | string
 
   const unfolded = parseHeaderBlock(rawSource)
 
-  // Date from topmost Received: header (semicolon-delimited timestamp at end)
+  // Date from topmost Received: header (semicolon-delimited timestamp at end),
+  // falling back to the Date: header for sent mail / drafts that lack Received:.
   let dateStr = '0000-00-00'
   const receivedLine = extractRawHeader(unfolded, 'received')
   if (receivedLine) {
     const semi = receivedLine.lastIndexOf(';')
     if (semi !== -1) {
       const parsed = new Date(receivedLine.slice(semi + 1).trim())
+      if (!isNaN(parsed.getTime())) dateStr = parsed.toISOString().slice(0, 10)
+    }
+  }
+  if (dateStr === '0000-00-00') {
+    const dateLine = extractRawHeader(unfolded, 'date')
+    if (dateLine) {
+      const parsed = new Date(dateLine.trim())
       if (!isNaN(parsed.getTime())) dateStr = parsed.toISOString().slice(0, 10)
     }
   }
