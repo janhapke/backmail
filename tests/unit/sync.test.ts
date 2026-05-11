@@ -10,7 +10,7 @@ import {
   ensureRepo,
   sanitizeMessageId,
   messageFilename,
-  folderPathToFilename,
+  folderPathToFsPath,
   formatCommitMessage,
   filterFolders,
 } from '../../src/core/sync.js'
@@ -173,22 +173,27 @@ describe('messageFilename', () => {
 // T-3-02: folderPathToFilename
 // ---------------------------------------------------------------------------
 
-describe('folderPathToFilename (T-3-02: path traversal)', () => {
-  it('Test F: removes forward slashes from IMAP folder path', () => {
-    const result = folderPathToFilename('[Gmail]/Sent Mail')
-    expect(result).not.toContain('/')
+describe('folderPathToFsPath (T-3-02: path traversal)', () => {
+  it('preserves hierarchy by splitting on / delimiter', () => {
+    const result = folderPathToFsPath('INBOX/Sent', '/')
+    expect(result).toBe('INBOX/Sent')
   })
 
-  it('Test G: rejects path traversal in folder names', () => {
-    const result = folderPathToFilename('../../../etc')
+  it('converts non-slash delimiter to / for filesystem nesting', () => {
+    const result = folderPathToFsPath('INBOX.Sent.Archive', '.')
+    expect(result).toBe('INBOX/Sent/Archive')
+  })
+
+  it('sanitizes path traversal in folder components', () => {
+    const result = folderPathToFsPath('../../../etc', '/')
     expect(result).not.toContain('..')
-    expect(result).not.toContain('/')
   })
 
-  it('Test H: output is filesystem-safe (alphanumeric, underscore, dot, bracket, dash)', () => {
-    const result = folderPathToFilename('[Gmail]/All Mail/Archived')
-    // Should only contain safe characters [A-Za-z0-9_.\[\]-]
-    expect(result).toMatch(/^[A-Za-z0-9_.\[\]-]+$/)
+  it('sanitizes unsafe characters in each component', () => {
+    const result = folderPathToFsPath('[Gmail]/Sent Mail', '/')
+    expect(result).not.toContain(' ')
+    // hierarchy separator is preserved
+    expect(result).toContain('/')
   })
 })
 
@@ -299,8 +304,7 @@ describe('SYNC-01: uidNext guard', () => {
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backmail-uidnext-'))
-    fs.mkdirSync(path.join(tmpDir, 'folders'), { recursive: true })
-    fs.mkdirSync(path.join(tmpDir, 'messages'), { recursive: true })
+    fs.mkdirSync(path.join(tmpDir, 'INBOX'), { recursive: true })
   })
 
   afterEach(() => {
@@ -314,8 +318,8 @@ describe('SYNC-01: uidNext guard', () => {
       uidnext: 6,
       messages: [{ uid: 5, 'message-id': '<existing@example.com>', filename: 'fixture-existing', flags: [] }],
     }
-    fs.writeFileSync(path.join(tmpDir, 'folders', 'INBOX.json'), JSON.stringify(storedState))
-    fs.writeFileSync(path.join(tmpDir, 'messages', 'fixture-existing.eml'), 'dummy')
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', '.backmail_state.json'), JSON.stringify(storedState))
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', 'fixture-existing.eml'), 'dummy')
 
     const fetchMock = vi.fn().mockImplementation(async function* () {})
     vi.mocked(ImapFlow).mockImplementationOnce(function () {
@@ -347,8 +351,8 @@ describe('SYNC-01: uidNext guard', () => {
       uidnext: 6,
       messages: [{ uid: 5, 'message-id': '<existing@example.com>', filename: 'fixture-existing', flags: [] }],
     }
-    fs.writeFileSync(path.join(tmpDir, 'folders', 'INBOX.json'), JSON.stringify(storedState))
-    fs.writeFileSync(path.join(tmpDir, 'messages', 'fixture-existing.eml'), 'dummy')
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', '.backmail_state.json'), JSON.stringify(storedState))
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', 'fixture-existing.eml'), 'dummy')
 
     const fetchMock = vi.fn().mockImplementation(async function* () {
       yield {
@@ -391,8 +395,7 @@ describe('SYNC-05: uidvalidity change triggers full wipe and re-sync', () => {
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backmail-uidvalidity-'))
-    fs.mkdirSync(path.join(tmpDir, 'folders'), { recursive: true })
-    fs.mkdirSync(path.join(tmpDir, 'messages'), { recursive: true })
+    fs.mkdirSync(path.join(tmpDir, 'INBOX'), { recursive: true })
   })
 
   afterEach(() => {
@@ -409,9 +412,9 @@ describe('SYNC-05: uidvalidity change triggers full wipe and re-sync', () => {
         { uid: 2, 'message-id': '<old2@example.com>', filename: 'fixture-old2', flags: [] },
       ],
     }
-    fs.writeFileSync(path.join(tmpDir, 'folders', 'INBOX.json'), JSON.stringify(storedState))
-    fs.writeFileSync(path.join(tmpDir, 'messages', 'fixture-old1.eml'), 'old email 1')
-    fs.writeFileSync(path.join(tmpDir, 'messages', 'fixture-old2.eml'), 'old email 2')
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', '.backmail_state.json'), JSON.stringify(storedState))
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', 'fixture-old1.eml'), 'old email 1')
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', 'fixture-old2.eml'), 'old email 2')
 
     vi.mocked(ImapFlow).mockImplementationOnce(function () {
       return {
@@ -433,8 +436,8 @@ describe('SYNC-05: uidvalidity change triggers full wipe and re-sync', () => {
 
     expect(result.removed).toBe(2)
     expect(result.added).toBe(0)
-    expect(fs.existsSync(path.join(tmpDir, 'messages', 'fixture-old1.eml'))).toBe(false)
-    expect(fs.existsSync(path.join(tmpDir, 'messages', 'fixture-old2.eml'))).toBe(false)
+    expect(fs.existsSync(path.join(tmpDir, 'INBOX', 'fixture-old1.eml'))).toBe(false)
+    expect(fs.existsSync(path.join(tmpDir, 'INBOX', 'fixture-old2.eml'))).toBe(false)
   })
 
   it('fetches all messages from scratch after a uidvalidity change', async () => {
@@ -444,8 +447,8 @@ describe('SYNC-05: uidvalidity change triggers full wipe and re-sync', () => {
       uidnext: 2,
       messages: [{ uid: 1, 'message-id': '<stale@example.com>', filename: 'fixture-stale', flags: [] }],
     }
-    fs.writeFileSync(path.join(tmpDir, 'folders', 'INBOX.json'), JSON.stringify(storedState))
-    fs.writeFileSync(path.join(tmpDir, 'messages', 'fixture-stale.eml'), 'stale')
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', '.backmail_state.json'), JSON.stringify(storedState))
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', 'fixture-stale.eml'), 'stale')
 
     const fetchMock = vi.fn().mockImplementation(async function* () {
       yield {
@@ -490,8 +493,7 @@ describe('SYNC-06: message deletion removes local .eml files', () => {
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backmail-deletion-'))
-    fs.mkdirSync(path.join(tmpDir, 'folders'), { recursive: true })
-    fs.mkdirSync(path.join(tmpDir, 'messages'), { recursive: true })
+    fs.mkdirSync(path.join(tmpDir, 'INBOX'), { recursive: true })
   })
 
   afterEach(() => {
@@ -509,10 +511,10 @@ describe('SYNC-06: message deletion removes local .eml files', () => {
         { uid: 3, 'message-id': '<deleted@example.com>', filename: 'fixture-deleted', flags: [] },
       ],
     }
-    fs.writeFileSync(path.join(tmpDir, 'folders', 'INBOX.json'), JSON.stringify(storedState))
-    fs.writeFileSync(path.join(tmpDir, 'messages', 'fixture-keep1.eml'), 'keep')
-    fs.writeFileSync(path.join(tmpDir, 'messages', 'fixture-keep2.eml'), 'keep')
-    fs.writeFileSync(path.join(tmpDir, 'messages', 'fixture-deleted.eml'), 'deleted')
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', '.backmail_state.json'), JSON.stringify(storedState))
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', 'fixture-keep1.eml'), 'keep')
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', 'fixture-keep2.eml'), 'keep')
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', 'fixture-deleted.eml'), 'deleted')
 
     vi.mocked(ImapFlow).mockImplementationOnce(function () {
       return {
@@ -533,9 +535,9 @@ describe('SYNC-06: message deletion removes local .eml files', () => {
     )
 
     expect(result.removed).toBe(1)
-    expect(fs.existsSync(path.join(tmpDir, 'messages', 'fixture-deleted.eml'))).toBe(false)
-    expect(fs.existsSync(path.join(tmpDir, 'messages', 'fixture-keep1.eml'))).toBe(true)
-    expect(fs.existsSync(path.join(tmpDir, 'messages', 'fixture-keep2.eml'))).toBe(true)
+    expect(fs.existsSync(path.join(tmpDir, 'INBOX', 'fixture-deleted.eml'))).toBe(false)
+    expect(fs.existsSync(path.join(tmpDir, 'INBOX', 'fixture-keep1.eml'))).toBe(true)
+    expect(fs.existsSync(path.join(tmpDir, 'INBOX', 'fixture-keep2.eml'))).toBe(true)
   })
 
   it('removes multiple deleted messages and updates result.removed correctly', async () => {
@@ -550,9 +552,9 @@ describe('SYNC-06: message deletion removes local .eml files', () => {
         { uid: 4, 'message-id': '<d@example.com>', filename: 'fixture-d', flags: [] },
       ],
     }
-    fs.writeFileSync(path.join(tmpDir, 'folders', 'INBOX.json'), JSON.stringify(storedState))
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', '.backmail_state.json'), JSON.stringify(storedState))
     for (const id of ['a', 'b', 'c', 'd']) {
-      fs.writeFileSync(path.join(tmpDir, 'messages', `fixture-${id}.eml`), 'content')
+      fs.writeFileSync(path.join(tmpDir, 'INBOX', `fixture-${id}.eml`), 'content')
     }
 
     vi.mocked(ImapFlow).mockImplementationOnce(function () {
@@ -574,10 +576,10 @@ describe('SYNC-06: message deletion removes local .eml files', () => {
     )
 
     expect(result.removed).toBe(3)
-    expect(fs.existsSync(path.join(tmpDir, 'messages', 'fixture-a.eml'))).toBe(true)
-    expect(fs.existsSync(path.join(tmpDir, 'messages', 'fixture-b.eml'))).toBe(false)
-    expect(fs.existsSync(path.join(tmpDir, 'messages', 'fixture-c.eml'))).toBe(false)
-    expect(fs.existsSync(path.join(tmpDir, 'messages', 'fixture-d.eml'))).toBe(false)
+    expect(fs.existsSync(path.join(tmpDir, 'INBOX', 'fixture-a.eml'))).toBe(true)
+    expect(fs.existsSync(path.join(tmpDir, 'INBOX', 'fixture-b.eml'))).toBe(false)
+    expect(fs.existsSync(path.join(tmpDir, 'INBOX', 'fixture-c.eml'))).toBe(false)
+    expect(fs.existsSync(path.join(tmpDir, 'INBOX', 'fixture-d.eml'))).toBe(false)
   })
 })
 
@@ -591,8 +593,6 @@ describe('SYNC-07: per-folder errors accumulate without aborting the sync', () =
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backmail-per-folder-'))
-    fs.mkdirSync(path.join(tmpDir, 'folders'), { recursive: true })
-    fs.mkdirSync(path.join(tmpDir, 'messages'), { recursive: true })
   })
 
   afterEach(() => {
@@ -666,8 +666,6 @@ describe('SYNC-08: connection error re-throws when no data has been written', ()
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backmail-conn-err-'))
-    fs.mkdirSync(path.join(tmpDir, 'folders'), { recursive: true })
-    fs.mkdirSync(path.join(tmpDir, 'messages'), { recursive: true })
   })
 
   afterEach(() => {
@@ -706,8 +704,6 @@ describe('SYNC-09: git commit failure marks result as partial', () => {
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backmail-git-fail-'))
-    fs.mkdirSync(path.join(tmpDir, 'folders'), { recursive: true })
-    fs.mkdirSync(path.join(tmpDir, 'messages'), { recursive: true })
   })
 
   afterEach(() => {

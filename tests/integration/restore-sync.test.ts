@@ -21,9 +21,8 @@ beforeAll(async () => {
   // Set password in env so getPassword() can retrieve it without keyring
   process.env.BACKMAIL_TEST_PASSWORD = IMAP_PASS
 
-  // Create folders and messages directories
-  await fs.mkdir(path.join(tmpRepo, 'folders'))
-  await fs.mkdir(path.join(tmpRepo, 'messages'))
+  // Create INBOX directory
+  await fs.mkdir(path.join(tmpRepo, 'INBOX'))
 
   // Initialize git repo with seed data
   execSync('git init', { cwd: tmpRepo })
@@ -42,7 +41,7 @@ beforeAll(async () => {
     ],
   }
   await fs.writeFile(
-    path.join(tmpRepo, 'folders', 'INBOX.json'),
+    path.join(tmpRepo, 'INBOX', '.backmail_state.json'),
     JSON.stringify(inboxState)
   )
 
@@ -71,9 +70,9 @@ Message-ID: <msg3@example.com>
 
 This is the body of the third email.`
 
-  await fs.writeFile(path.join(tmpRepo, 'messages', 'fixture-msg1.eml'), eml1)
-  await fs.writeFile(path.join(tmpRepo, 'messages', 'fixture-msg2.eml'), eml2)
-  await fs.writeFile(path.join(tmpRepo, 'messages', 'fixture-msg3.eml'), eml3)
+  await fs.writeFile(path.join(tmpRepo, 'INBOX', 'fixture-msg1.eml'), eml1)
+  await fs.writeFile(path.join(tmpRepo, 'INBOX', 'fixture-msg2.eml'), eml2)
+  await fs.writeFile(path.join(tmpRepo, 'INBOX', 'fixture-msg3.eml'), eml3)
 
   // Create initial commit
   execSync('touch README.md', { cwd: tmpRepo })

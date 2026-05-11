@@ -151,17 +151,22 @@ export function messageFilename(rawMessageId: string, rawSource: Buffer | string
 }
 
 /**
- * Sanitize IMAP folder path to make it filesystem-safe.
- * - Replace unsafe characters with underscore
- * - Replace .. with __ (prevent relative path traversal)
+ * Convert an IMAP folder path to a filesystem-safe relative path.
+ * Splits on the server's hierarchy delimiter and joins with '/' for directory nesting.
+ * Each path component is individually sanitized.
  */
-export function folderPathToFilename(imapPath: string): string {
-  let result = imapPath
-  // Replace filesystem-unsafe characters with underscore
-  result = result.replace(/[/\\:*?"<>|\s]/g, '_')
-  // Replace .. with __ to prevent relative path traversal
-  result = result.replace(/\.\./g, '__')
-  return result
+export function folderPathToFsPath(imapPath: string, delimiter: string): string {
+  const components = delimiter ? imapPath.split(delimiter) : [imapPath]
+  return components
+    .map(component => {
+      let result = component
+      result = result.replace(/[/\\:*?"<>|\s]/g, '_')
+      result = result.replace(/\.\./g, '__')
+      if (WINDOWS_RESERVED_NAMES.test(result)) result = `_${result}`
+      return result
+    })
+    .filter(c => c.length > 0)
+    .join('/')
 }
 
 /**
@@ -258,9 +263,8 @@ export async function syncAccount(
   // Ensure repository exists
   const repoInitialized = await ensureRepo(repoPath)
 
-  // Create directories
-  await fs.mkdir(path.join(repoPath, 'messages'), { recursive: true })
-  await fs.mkdir(path.join(repoPath, 'folders'), { recursive: true })
+  // Base repo directory is created by ensureRepo; individual folder dirs are
+  // created lazily inside syncFolder when each folder is first synced.
 
   // Create IMAP client
   const client = new ImapFlow({
@@ -343,13 +347,17 @@ async function syncFolder(
   repoPath: string,
   log: (msg: string) => void,
 ): Promise<FolderSyncResult> {
-  const folderFilename = folderPathToFilename(folder.path)
-  const folderJsonPath = path.join(repoPath, 'folders', `${folderFilename}.json`)
+  const folderFsPath = folderPathToFsPath(folder.path, folder.delimiter)
+  const folderDirPath = path.join(repoPath, folderFsPath)
+  const stateFilePath = path.join(folderDirPath, '.backmail_state.json')
+
+  // Ensure folder directory exists
+  await fs.mkdir(folderDirPath, { recursive: true })
 
   // Read stored folder state
   let storedState: FolderState | null = null
   try {
-    const jsonContent = await fs.readFile(folderJsonPath, 'utf-8')
+    const jsonContent = await fs.readFile(stateFilePath, 'utf-8')
     storedState = JSON.parse(jsonContent) as FolderState
   } catch {
     // File doesn't exist yet; start fresh
@@ -379,7 +387,7 @@ async function syncFolder(
         // Delete all stored messages and treat as a fresh sync.
         if (storedState.messages.length > 0) {
           for (const msg of storedState.messages) {
-            const msgPath = path.join(repoPath, 'messages', `${msg.filename}.eml`)
+            const msgPath = path.join(folderDirPath, `${msg.filename}.eml`)
             await fs.unlink(msgPath).catch(() => {})
           }
           removed += storedState.messages.length
@@ -405,9 +413,10 @@ async function syncFolder(
     if (hasNewMessages) {
       log(`  ${folder.path}: downloading new messages (UID ${range})...`)
       for await (const msg of client.fetch(range, { uid: true, source: true, envelope: true, flags: true }, { uid: true })) {
-        const rawId = msg.envelope?.messageId ?? `no-message-id_uid-${msg.uid}_${folderFilename}`
+        const folderTag = folderFsPath.replace(/\//g, '_')
+        const rawId = msg.envelope?.messageId ?? `no-message-id_uid-${msg.uid}_${folderTag}`
         const filename = messageFilename(rawId, msg.source as Buffer)
-        const msgPath = path.join(repoPath, 'messages', `${filename}.eml`)
+        const msgPath = path.join(folderDirPath, `${filename}.eml`)
 
         await fs.writeFile(msgPath, msg.source as Buffer)
 
@@ -435,7 +444,7 @@ async function syncFolder(
 
     // Delete .eml files for removed messages
     for (const msg of removedMessages) {
-      const msgPath = path.join(repoPath, 'messages', `${msg.filename}.eml`)
+      const msgPath = path.join(folderDirPath, `${msg.filename}.eml`)
       await fs.unlink(msgPath).catch(() => {})
     }
     removed += removedMessages.length
@@ -451,7 +460,7 @@ async function syncFolder(
       uidnext: serverUidNext,
       messages: [...keptMessages, ...newMessages],
     }
-    await fs.writeFile(folderJsonPath, JSON.stringify(updatedState, null, 2))
+    await fs.writeFile(stateFilePath, JSON.stringify(updatedState, null, 2))
   } finally {
     lock.release()
   }

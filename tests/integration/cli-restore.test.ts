@@ -34,8 +34,7 @@ beforeAll(async () => {
 
   // Create archive/ subdirectory — this is what the CLI passes as archivePath
   const archivePath = path.join(tmpRepo, 'archive')
-  await fs.mkdir(path.join(archivePath, 'folders'), { recursive: true })
-  await fs.mkdir(path.join(archivePath, 'messages'), { recursive: true })
+  await fs.mkdir(path.join(archivePath, 'INBOX'), { recursive: true })
 
   // Initialize git repo inside archive/
   execSync('git init', { cwd: archivePath })
@@ -48,13 +47,13 @@ beforeAll(async () => {
     uidvalidity: '1234567890',
     uidnext: 6,
     messages: [
-      { uid: 1, 'message-id': '<msg1@example.com>', flags: [] },
-      { uid: 2, 'message-id': '<msg2@example.com>', flags: ['\\Seen'] },
-      { uid: 3, 'message-id': '<msg3@example.com>', flags: [] },
+      { uid: 1, 'message-id': '<msg1@example.com>', filename: `${sanitizeMessageId('<msg1@example.com>')}`, flags: [] },
+      { uid: 2, 'message-id': '<msg2@example.com>', filename: `${sanitizeMessageId('<msg2@example.com>')}`, flags: ['\\Seen'] },
+      { uid: 3, 'message-id': '<msg3@example.com>', filename: `${sanitizeMessageId('<msg3@example.com>')}`, flags: [] },
     ],
   }
   await fs.writeFile(
-    path.join(archivePath, 'folders', 'INBOX.json'),
+    path.join(archivePath, 'INBOX', '.backmail_state.json'),
     JSON.stringify(inboxState)
   )
 
@@ -84,15 +83,15 @@ Message-ID: <msg3@example.com>
 This is the body of the third email.`
 
   await fs.writeFile(
-    path.join(archivePath, 'messages', `${sanitizeMessageId('<msg1@example.com>')}.eml`),
+    path.join(archivePath, 'INBOX', `${sanitizeMessageId('<msg1@example.com>')}.eml`),
     eml1
   )
   await fs.writeFile(
-    path.join(archivePath, 'messages', `${sanitizeMessageId('<msg2@example.com>')}.eml`),
+    path.join(archivePath, 'INBOX', `${sanitizeMessageId('<msg2@example.com>')}.eml`),
     eml2
   )
   await fs.writeFile(
-    path.join(archivePath, 'messages', `${sanitizeMessageId('<msg3@example.com>')}.eml`),
+    path.join(archivePath, 'INBOX', `${sanitizeMessageId('<msg3@example.com>')}.eml`),
     eml3
   )
 

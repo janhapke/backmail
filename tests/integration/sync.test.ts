@@ -73,18 +73,14 @@ describe('SYNC-01: end-to-end incremental fetch', () => {
     // Assert: at least one message was added
     expect(result.added).toBeGreaterThanOrEqual(1)
 
-    // Assert: a message file exists in messages/ directory
-    const messagesDir = path.join(tmpRepo, 'messages')
-    const messages = await fs.readdir(messagesDir)
+    // Assert: a message file exists in the INBOX directory
+    const inboxDir = path.join(tmpRepo, 'INBOX')
+    const inboxFiles = await fs.readdir(inboxDir)
+    const messages = inboxFiles.filter(f => f.endsWith('.eml'))
     expect(messages.length).toBeGreaterThan(0)
-    expect(messages[0]).toMatch(/\.eml$/)
 
     // Assert: folder state JSON exists and has expected schema
-    const foldersDir = path.join(tmpRepo, 'folders')
-    const folderFiles = await fs.readdir(foldersDir)
-    expect(folderFiles.length).toBeGreaterThan(0)
-
-    const inboxState = JSON.parse(await fs.readFile(path.join(foldersDir, 'INBOX.json'), 'utf-8'))
+    const inboxState = JSON.parse(await fs.readFile(path.join(inboxDir, '.backmail_state.json'), 'utf-8'))
     expect(inboxState).toHaveProperty('uidvalidity')
     expect(inboxState).toHaveProperty('uidnext')
     expect(inboxState).toHaveProperty('messages')

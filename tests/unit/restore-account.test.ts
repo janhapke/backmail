@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import path from 'node:path'
 import { restoreAccount } from '../../src/core/restore.js'
 
 // ── Hoisted mock refs ────────────────────────────────────────────────────────
-// vi.mock() calls are hoisted; vi.hoisted() lets us share refs with test bodies.
 
 const mockFsReaddir = vi.hoisted(() => vi.fn())
 const mockFsReadFile = vi.hoisted(() => vi.fn())
@@ -25,7 +25,6 @@ vi.mock('node:fs/promises', () => ({
 }))
 
 vi.mock('imapflow', () => ({
-  // Must use `function`, not arrow, so `new ImapFlow(...)` works as a constructor
   ImapFlow: vi.fn().mockImplementation(function () { return mockImapClient }),
 }))
 
@@ -35,20 +34,37 @@ vi.mock('../../src/core/browse.js', () => ({
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-type FolderDef = { path: string; messages: Array<{ 'message-id': string }> }
+type FolderMessage = { 'message-id': string; filename?: string }
+type FolderDef = { path: string; messages: FolderMessage[] }
 
-/** Wire up fs mocks for a given set of folders and their messages. */
+function mockDirent(name: string, isDir: boolean) {
+  return { name, isDirectory: () => isDir }
+}
+
+/**
+ * Wire up fs mocks to simulate the new folder-based repo layout.
+ * Each folder becomes a directory containing .backmail_state.json.
+ * Only single-level folder paths are supported here.
+ */
 function setupFs(folders: FolderDef[]) {
-  mockFsReaddir.mockResolvedValue(
-    folders.map(f => `${f.path.replace(/[/\\:*?"<>|\s]/g, '_')}.json`)
-  )
+  mockFsReaddir.mockImplementation(async (dirPath: unknown) => {
+    const p = dirPath as string
+    if (p === ARCHIVE) {
+      return folders.map(f => mockDirent(f.path, true))
+    }
+    const folder = folders.find(f => p === path.join(ARCHIVE, f.path))
+    if (folder) return [mockDirent('.backmail_state.json', false)]
+    return []
+  })
+
   mockFsReadFile.mockImplementation(async (filePath: unknown, encoding?: unknown) => {
+    const p = filePath as string
     if (encoding === 'utf-8') {
-      const folder = folders.find(f => {
-        const filename = `${f.path.replace(/[/\\:*?"<>|\s]/g, '_')}.json`
-        return (filePath as string).endsWith(filename)
-      })
-      if (folder) return JSON.stringify({ folderPath: folder.path, messages: folder.messages })
+      const folder = folders.find(f => p === path.join(ARCHIVE, f.path, '.backmail_state.json'))
+      if (folder) {
+        const msgs = folder.messages.map(m => ({ filename: 'fixture', ...m }))
+        return JSON.stringify({ folderPath: folder.path, messages: msgs })
+      }
       throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
     }
     return Buffer.from('From: test@example.com\r\n\r\nTest email body')
@@ -172,7 +188,7 @@ describe('restoreAccount() – normal mode', () => {
     }])
     mockFsReadFile.mockImplementation(async (_path: unknown, encoding?: unknown) => {
       if (encoding === 'utf-8')
-        return JSON.stringify({ folderPath: 'INBOX', messages: [{ 'message-id': '<missing@example.com>' }] })
+        return JSON.stringify({ folderPath: 'INBOX', messages: [{ filename: 'fixture', 'message-id': '<missing@example.com>' }] })
       throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
     })
 
@@ -191,37 +207,42 @@ describe('restoreAccount() – normal mode', () => {
     expect(result.errors).toBe(1)
   })
 
-  it('silently skips folders with malformed JSON without incrementing errors', async () => {
-    mockFsReaddir.mockResolvedValue(['INBOX.json', 'broken.json'])
+  it('silently skips folders with malformed .backmail_state.json without incrementing errors', async () => {
+    mockFsReaddir.mockImplementation(async (dirPath: unknown) => {
+      const p = dirPath as string
+      if (p === ARCHIVE) return [mockDirent('INBOX', true), mockDirent('BrokenFolder', true)]
+      if (p === path.join(ARCHIVE, 'INBOX')) return [mockDirent('.backmail_state.json', false)]
+      if (p === path.join(ARCHIVE, 'BrokenFolder')) return [mockDirent('.backmail_state.json', false)]
+      return []
+    })
     mockFsReadFile.mockImplementation(async (filePath: unknown, encoding?: unknown) => {
       const p = filePath as string
-      if (p.endsWith('broken.json')) {
-        if (encoding === 'utf-8') return '{ invalid json'
-        throw new Error('binary read on broken file')
-      }
-      if (encoding === 'utf-8')
-        return JSON.stringify({ folderPath: 'INBOX', messages: [{ 'message-id': '<ok@example.com>' }] })
+      if (p.includes('BrokenFolder') && encoding === 'utf-8') return '{ invalid json'
+      if (p.includes('INBOX') && encoding === 'utf-8')
+        return JSON.stringify({ folderPath: 'INBOX', messages: [{ filename: 'fixture', 'message-id': '<ok@example.com>' }] })
       return Buffer.from('email')
     })
 
     const result = await restoreAccount(ARCHIVE, TARGET_URL, undefined, OPTS_PLAIN)
 
-    // broken.json is silently skipped in the folder-discovery loop; INBOX still processed
+    // BrokenFolder silently skipped; INBOX still processed
     expect(result.uploaded).toBe(1)
     expect(result.errors).toBe(0)
   })
 
   it('increments errors when a folder state file is unreadable during message processing', async () => {
-    // First pass (discovery): returns valid JSON with folderPath so folder is added to list.
-    // Second pass (message loop): same file returns invalid JSON → error counted.
     let readCount = 0
-    mockFsReaddir.mockResolvedValue(['INBOX.json'])
+    mockFsReaddir.mockImplementation(async (dirPath: unknown) => {
+      const p = dirPath as string
+      if (p === ARCHIVE) return [mockDirent('INBOX', true)]
+      if (p === path.join(ARCHIVE, 'INBOX')) return [mockDirent('.backmail_state.json', false)]
+      return []
+    })
     mockFsReadFile.mockImplementation(async (_path: unknown, encoding?: unknown) => {
       if (encoding === 'utf-8') {
         readCount++
         if (readCount === 1)
-          return JSON.stringify({ folderPath: 'INBOX', messages: [{ 'message-id': '<m@x.com>' }] })
-        // Second read (message loop) is broken
+          return JSON.stringify({ folderPath: 'INBOX', messages: [{ filename: 'fixture', 'message-id': '<m@x.com>' }] })
         throw new Error('ENOENT')
       }
       return Buffer.from('email')
@@ -284,7 +305,7 @@ describe('restoreAccount() – normal mode', () => {
     setupFs([{ path: 'INBOX', messages: [{ 'message-id': '<e@example.com>' }] }])
     mockFsReadFile.mockImplementation(async (_path: unknown, encoding?: unknown) => {
       if (encoding === 'utf-8')
-        return JSON.stringify({ folderPath: 'INBOX', messages: [{ 'message-id': '<e@example.com>' }] })
+        return JSON.stringify({ folderPath: 'INBOX', messages: [{ filename: 'fixture', 'message-id': '<e@example.com>' }] })
       throw new Error('read failed')
     })
 
@@ -296,7 +317,6 @@ describe('restoreAccount() – normal mode', () => {
 
   it('calls checkoutCommit and uses the returned path when dateOrCommit is provided', async () => {
     mockCheckoutCommit.mockResolvedValue({ path: '/fake/checkout' })
-    // Set up fs mocks for the checkout path
     mockFsReaddir.mockResolvedValue([])
 
     await restoreAccount(ARCHIVE, TARGET_URL, 'abc1234', OPTS_PLAIN)
@@ -305,7 +325,6 @@ describe('restoreAccount() – normal mode', () => {
   })
 
   it('always calls logout even if an error occurs during processing', async () => {
-    // Make readdir throw to trigger an error in the try block
     mockFsReaddir.mockRejectedValue(new Error('readdir failed'))
 
     await expect(
@@ -319,7 +338,6 @@ describe('restoreAccount() – normal mode', () => {
 describe('parseImapUrl() – missing coverage', () => {
   it('throws when URL string is completely invalid', async () => {
     const { parseImapUrl } = await import('../../src/core/restore.js')
-    // 'not a url' has an internal space which makes new URL() throw
     expect(() => parseImapUrl('not a url')).toThrow(/Invalid URL/)
   })
 

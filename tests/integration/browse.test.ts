@@ -22,9 +22,8 @@ beforeAll(async () => {
   execSync('git config user.email "test@example.com"', { cwd: tmpRepo })
   execSync('git config user.name "Test User"', { cwd: tmpRepo })
 
-  // Create folders and messages directories
-  await fs.mkdir(path.join(tmpRepo, 'folders'))
-  await fs.mkdir(path.join(tmpRepo, 'messages'))
+  // Create INBOX directory
+  await fs.mkdir(path.join(tmpRepo, 'INBOX'))
 
   // Create sample folder state file
   const inboxState = {
@@ -36,7 +35,7 @@ beforeAll(async () => {
     ],
   }
   await fs.writeFile(
-    path.join(tmpRepo, 'folders', 'INBOX.json'),
+    path.join(tmpRepo, 'INBOX', '.backmail_state.json'),
     JSON.stringify(inboxState)
   )
 
@@ -57,8 +56,8 @@ Message-ID: <msg2@example.com>
 
 This is the body of the second email.`
 
-  await fs.writeFile(path.join(tmpRepo, 'messages', 'fixture-msg1.eml'), eml1)
-  await fs.writeFile(path.join(tmpRepo, 'messages', 'fixture-msg2.eml'), eml2)
+  await fs.writeFile(path.join(tmpRepo, 'INBOX', 'fixture-msg1.eml'), eml1)
+  await fs.writeFile(path.join(tmpRepo, 'INBOX', 'fixture-msg2.eml'), eml2)
 
   // Create initial commit
   execSync('touch README.md', { cwd: tmpRepo })
@@ -170,24 +169,24 @@ describe('listMessages integration', () => {
 
 describe('viewMessage integration', () => {
   it('retrieves raw EML', async () => {
-    const result = await viewMessage(tmpRepo, 'fixture-msg1', 'eml')
+    const result = await viewMessage(tmpRepo, 'INBOX/fixture-msg1', 'eml')
     expect(result).toContain('From: alice@example.com')
     expect(result).toContain('First test email')
     expect(result).toContain('This is the body of the first email')
   })
 
   it('extracts plaintext (default format)', async () => {
-    const result = await viewMessage(tmpRepo, 'fixture-msg1')
+    const result = await viewMessage(tmpRepo, 'INBOX/fixture-msg1')
     expect(result).toContain('This is the body of the first email')
   })
 
   it('extracts plaintext explicitly', async () => {
-    const result = await viewMessage(tmpRepo, 'fixture-msg2', 'plaintext')
+    const result = await viewMessage(tmpRepo, 'INBOX/fixture-msg2', 'plaintext')
     expect(result).toContain('This is the body of the second email')
   })
 
   it('returns JSON with headers and parts', async () => {
-    const result = (await viewMessage(tmpRepo, 'fixture-msg1', 'json')) as Record<
+    const result = (await viewMessage(tmpRepo, 'INBOX/fixture-msg1', 'json')) as Record<
       string,
       unknown
     >

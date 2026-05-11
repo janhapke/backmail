@@ -5,7 +5,6 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { simpleGit } from 'simple-git'
 import { simpleParser } from 'mailparser'
-import { folderPathToFilename } from './sync.js'
 
 // ── Type Definitions ──────────────────────────────────────────────────────────
 
@@ -150,24 +149,36 @@ async function readEmlHeaders(emlPath: string): Promise<Record<string, string>> 
 
 /**
  * List all folders in the repository.
- * Reads folder names from folders/*.json filenames.
+ * Walks the directory tree looking for .backmail_state.json files and returns
+ * their parent directory paths (relative to repoPath, using '/' as separator).
  *
  * @param repoPath - Path to the mail repository
- * @returns Array of folder names
+ * @returns Array of folder paths (e.g. ['INBOX', 'Archive/2024'])
  */
 export async function listFolders(repoPath: string): Promise<string[]> {
-  const foldersPath = path.join(repoPath, 'folders')
-  try {
-    const files = await fs.readdir(foldersPath)
-    // Strip .json extension from each filename to get folder name
-    return files
-      .filter((f) => f.endsWith('.json'))
-      .map((f) => f.slice(0, -5)) // remove .json
-      .sort()
-  } catch {
-    // folders directory doesn't exist, return empty array
-    return []
+  const results: string[] = []
+
+  async function walk(dirPath: string, relativePath: string): Promise<void> {
+    let entries
+    try {
+      entries = await fs.readdir(dirPath, { withFileTypes: true })
+    } catch {
+      return
+    }
+    let hasState = false
+    for (const entry of entries) {
+      if (entry.name === '.backmail_state.json' && !entry.isDirectory()) {
+        hasState = true
+      } else if (!entry.name.startsWith('.') && entry.isDirectory()) {
+        const child = relativePath ? `${relativePath}/${entry.name}` : entry.name
+        await walk(path.join(dirPath, entry.name), child)
+      }
+    }
+    if (hasState && relativePath) results.push(relativePath)
   }
+
+  await walk(repoPath, '')
+  return results.sort()
 }
 
 /**
@@ -201,24 +212,19 @@ export async function listMessages(
   repoPath: string,
   folderName: string
 ): Promise<MessageSummary[]> {
-  // Convert folder name to filename using folderPathToFilename
-  const filename = folderPathToFilename(folderName)
-  const folderPath = path.join(repoPath, 'folders', `${filename}.json`)
+  const stateFilePath = path.join(repoPath, folderName, '.backmail_state.json')
 
-  // Read folder state file
   let state: FolderState
   try {
-    const content = await fs.readFile(folderPath, 'utf-8')
+    const content = await fs.readFile(stateFilePath, 'utf-8')
     state = JSON.parse(content) as FolderState
   } catch {
     throw new Error(`Folder not found: ${folderName}`)
   }
 
-  // For each message, read headers and create summary
   const summaries: MessageSummary[] = []
   for (const msg of state.messages) {
-    const emlPath = path.join(repoPath, 'messages', `${msg.filename}.eml`)
-
+    const emlPath = path.join(repoPath, folderName, `${msg.filename}.eml`)
     try {
       const headers = await readEmlHeaders(emlPath)
       summaries.push({
@@ -228,13 +234,7 @@ export async function listMessages(
         subject: headers['subject'] ?? '',
       })
     } catch {
-      // EML file missing — skip this message or use defaults
-      summaries.push({
-        messageId: msg['message-id'],
-        date: '',
-        from: '',
-        subject: '',
-      })
+      summaries.push({ messageId: msg['message-id'], date: '', from: '', subject: '' })
     }
   }
 
@@ -255,21 +255,24 @@ export async function listMessages(
  */
 export async function viewMessage(
   repoPath: string,
-  filename: string,
+  filepath: string,
   format: 'eml' | 'plaintext' | 'json' = 'plaintext'
 ): Promise<string | Record<string, unknown>> {
   // Strip .eml extension if the caller passed the full filename
-  const stem = filename.endsWith('.eml') ? filename.slice(0, -4) : filename
-  // Reject any path separators to prevent directory traversal
-  if (/[/\\]/.test(stem)) throw new Error(`Invalid filename: ${filename}`)
-  const emlPath = path.join(repoPath, 'messages', `${stem}.eml`)
+  const stem = filepath.endsWith('.eml') ? filepath.slice(0, -4) : filepath
+  // Prevent path traversal: reject '..' components and absolute paths
+  const components = stem.split('/')
+  if (stem.startsWith('/') || components.some(c => c === '..' || c === '.')) {
+    throw new Error(`Invalid filepath: ${filepath}`)
+  }
+  const emlPath = path.join(repoPath, `${stem}.eml`)
 
   // Read the EML file
   let emlBuffer: Buffer
   try {
     emlBuffer = await fs.readFile(emlPath)
   } catch {
-    throw new Error(`Message not found: ${filename}`)
+    throw new Error(`Message not found: ${filepath}`)
   }
 
   // Handle different formats

@@ -134,31 +134,30 @@ describe('listFolders', () => {
     }
   })
 
-  it('lists all folders from folders/*.json filenames', async () => {
-    const foldersPath = path.join(tempDir, 'folders')
-    await fs.mkdir(foldersPath, { recursive: true })
+  it('lists all folders containing .backmail_state.json', async () => {
+    await fs.mkdir(path.join(tempDir, 'INBOX'), { recursive: true })
+    await fs.mkdir(path.join(tempDir, 'Sent'), { recursive: true })
+    await fs.mkdir(path.join(tempDir, 'Archive'), { recursive: true })
 
-    // Create folder state files
-    await fs.writeFile(path.join(foldersPath, 'INBOX.json'), '{"uidvalidity":"1","uidnext":1,"messages":[]}')
-    await fs.writeFile(path.join(foldersPath, 'Sent.json'), '{"uidvalidity":"1","uidnext":1,"messages":[]}')
-    await fs.writeFile(path.join(foldersPath, 'Archive.json'), '{"uidvalidity":"1","uidnext":1,"messages":[]}')
+    await fs.writeFile(path.join(tempDir, 'INBOX', '.backmail_state.json'), '{"folderPath":"INBOX","uidvalidity":"1","uidnext":1,"messages":[]}')
+    await fs.writeFile(path.join(tempDir, 'Sent', '.backmail_state.json'), '{"folderPath":"Sent","uidvalidity":"1","uidnext":1,"messages":[]}')
+    await fs.writeFile(path.join(tempDir, 'Archive', '.backmail_state.json'), '{"folderPath":"Archive","uidvalidity":"1","uidnext":1,"messages":[]}')
 
     const result = await listFolders(tempDir)
     expect(result).toEqual(['Archive', 'INBOX', 'Sent']) // sorted
   })
 
-  it('returns empty array when folders dir missing', async () => {
+  it('returns empty array when no folders exist', async () => {
     const result = await listFolders(tempDir)
     expect(result).toEqual([])
   })
 
-  it('strips .json extension', async () => {
-    const foldersPath = path.join(tempDir, 'folders')
-    await fs.mkdir(foldersPath)
-    await fs.writeFile(path.join(foldersPath, 'Gmail_INBOX.json'), '{}')
+  it('supports nested folder hierarchy', async () => {
+    await fs.mkdir(path.join(tempDir, 'Archive', '2024'), { recursive: true })
+    await fs.writeFile(path.join(tempDir, 'Archive', '2024', '.backmail_state.json'), '{}')
 
     const result = await listFolders(tempDir)
-    expect(result).toEqual(['Gmail_INBOX'])
+    expect(result).toEqual(['Archive/2024'])
   })
 })
 
@@ -180,18 +179,15 @@ describe('listMessages', () => {
   })
 
   it('parses headers and returns MessageSummary array', async () => {
-    const foldersPath = path.join(tempDir, 'folders')
-    const messagesPath = path.join(tempDir, 'messages')
-    await fs.mkdir(foldersPath)
-    await fs.mkdir(messagesPath)
+    await fs.mkdir(path.join(tempDir, 'INBOX'))
 
     const msgId1 = '<msg1@example.com>'
     const msgId2 = '<msg2@example.com>'
 
-    // Create folder state
     await fs.writeFile(
-      path.join(foldersPath, 'INBOX.json'),
+      path.join(tempDir, 'INBOX', '.backmail_state.json'),
       JSON.stringify({
+        folderPath: 'INBOX',
         uidvalidity: '1',
         uidnext: 3,
         messages: [
@@ -201,7 +197,6 @@ describe('listMessages', () => {
       })
     )
 
-    // Create EML files with headers
     const eml1 = `From: sender@example.com
 To: recipient@example.com
 Subject: Test 1
@@ -215,8 +210,8 @@ Date: Tue, 02 Jan 2024 13:00:00 +0000
 
 Body 2`
 
-    await fs.writeFile(path.join(messagesPath, 'fixture-msg1.eml'), eml1)
-    await fs.writeFile(path.join(messagesPath, 'fixture-msg2.eml'), eml2)
+    await fs.writeFile(path.join(tempDir, 'INBOX', 'fixture-msg1.eml'), eml1)
+    await fs.writeFile(path.join(tempDir, 'INBOX', 'fixture-msg2.eml'), eml2)
 
     const result = await listMessages(tempDir, 'INBOX')
     expect(result).toHaveLength(2)
@@ -227,24 +222,18 @@ Body 2`
   })
 
   it('throws for non-existent folder', async () => {
-    const foldersPath = path.join(tempDir, 'folders')
-    await fs.mkdir(foldersPath)
-
     await expect(listMessages(tempDir, 'NonExistent')).rejects.toThrow(
       /Folder not found/
     )
   })
 
   it('handles missing EML files defensively', async () => {
-    const foldersPath = path.join(tempDir, 'folders')
-    const messagesPath = path.join(tempDir, 'messages')
-    await fs.mkdir(foldersPath)
-    await fs.mkdir(messagesPath)
+    await fs.mkdir(path.join(tempDir, 'INBOX'))
 
-    // Create folder state with message but no EML file
     await fs.writeFile(
-      path.join(foldersPath, 'INBOX.json'),
+      path.join(tempDir, 'INBOX', '.backmail_state.json'),
       JSON.stringify({
+        folderPath: 'INBOX',
         uidvalidity: '1',
         uidnext: 2,
         messages: [{ uid: 1, 'message-id': '<missing@example.com>', filename: 'fixture-missing', flags: [] }],
@@ -266,6 +255,7 @@ describe('viewMessage', () => {
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'browse-test-'))
+    await fs.mkdir(path.join(tempDir, 'INBOX'))
   })
 
   afterEach(async () => {
@@ -277,26 +267,20 @@ describe('viewMessage', () => {
   })
 
   it('returns raw EML for eml format', async () => {
-    const messagesPath = path.join(tempDir, 'messages')
-    await fs.mkdir(messagesPath)
-
     const rawEml = `From: test@example.com
 Subject: Test
 Date: Mon, 01 Jan 2024 12:00:00 +0000
 
 This is the body`
 
-    await fs.writeFile(path.join(messagesPath, 'fixture-test.eml'), rawEml)
+    await fs.writeFile(path.join(tempDir, 'INBOX', 'fixture-test.eml'), rawEml)
 
-    const result = await viewMessage(tempDir, 'fixture-test', 'eml')
+    const result = await viewMessage(tempDir, 'INBOX/fixture-test', 'eml')
     expect(result).toContain('From: test@example.com')
     expect(result).toContain('This is the body')
   })
 
   it('extracts text/plain for plaintext format', async () => {
-    const messagesPath = path.join(tempDir, 'messages')
-    await fs.mkdir(messagesPath)
-
     const eml = `From: test@example.com
 Subject: Test
 Date: Mon, 01 Jan 2024 12:00:00 +0000
@@ -304,33 +288,26 @@ Content-Type: text/plain
 
 This is plaintext`
 
-    await fs.writeFile(path.join(messagesPath, 'fixture-test.eml'), eml)
+    await fs.writeFile(path.join(tempDir, 'INBOX', 'fixture-test.eml'), eml)
 
-    const result = await viewMessage(tempDir, 'fixture-test', 'plaintext')
+    const result = await viewMessage(tempDir, 'INBOX/fixture-test', 'plaintext')
     expect(result).toContain('This is plaintext')
   })
 
   it('uses plaintext as default format', async () => {
-    const messagesPath = path.join(tempDir, 'messages')
-    await fs.mkdir(messagesPath)
-
     const eml = `From: test@example.com
 Subject: Test
 Content-Type: text/plain
 
 Default format text`
 
-    await fs.writeFile(path.join(messagesPath, 'fixture-test.eml'), eml)
+    await fs.writeFile(path.join(tempDir, 'INBOX', 'fixture-test.eml'), eml)
 
-    // Call without format parameter (should default to plaintext)
-    const result = await viewMessage(tempDir, 'fixture-test')
+    const result = await viewMessage(tempDir, 'INBOX/fixture-test')
     expect(result).toContain('Default format text')
   })
 
   it('returns JSON headers+parts for json format', async () => {
-    const messagesPath = path.join(tempDir, 'messages')
-    await fs.mkdir(messagesPath)
-
     const eml = `From: test@example.com
 Subject: Test Subject
 To: recipient@example.com
@@ -339,12 +316,11 @@ Content-Type: text/plain
 
 This is plaintext`
 
-    await fs.writeFile(path.join(messagesPath, 'fixture-test.eml'), eml)
+    await fs.writeFile(path.join(tempDir, 'INBOX', 'fixture-test.eml'), eml)
 
-    const result = (await viewMessage(tempDir, 'fixture-test', 'json')) as Record<string, unknown>
+    const result = (await viewMessage(tempDir, 'INBOX/fixture-test', 'json')) as Record<string, unknown>
     expect(result.headers).toBeDefined()
     expect(result.parts).toBeDefined()
-    // from header might be an object or string depending on parsing
     const fromHeader = (result.headers as Record<string, string>)['from']
     expect(typeof fromHeader).toBe('string')
     expect(fromHeader).toContain('test@example.com')
@@ -352,10 +328,6 @@ This is plaintext`
   })
 
   it('throws for plaintext when no text/plain part', async () => {
-    const messagesPath = path.join(tempDir, 'messages')
-    await fs.mkdir(messagesPath)
-
-    // Multipart message with only HTML and an attachment, no text/plain
     const eml = `From: test@example.com
 Subject: Test
 MIME-Version: 1.0
@@ -373,51 +345,38 @@ Content-Transfer-Encoding: base64
 YmluYXJ5IGNvbnRlbnQ=
 --boundary123--`
 
-    await fs.writeFile(path.join(messagesPath, 'fixture-test.eml'), eml)
+    await fs.writeFile(path.join(tempDir, 'INBOX', 'fixture-test.eml'), eml)
 
     await expect(
-      viewMessage(tempDir, 'fixture-test', 'plaintext')
+      viewMessage(tempDir, 'INBOX/fixture-test', 'plaintext')
     ).rejects.toThrow(/No text\/plain part found/)
   })
 
   it('strips .eml extension if caller passes the full filename', async () => {
-    const messagesPath = path.join(tempDir, 'messages')
-    await fs.mkdir(messagesPath)
-
     const eml = `From: test@example.com
 Subject: Test
 
 Body`
 
-    await fs.writeFile(path.join(messagesPath, 'fixture-test.eml'), eml)
+    await fs.writeFile(path.join(tempDir, 'INBOX', 'fixture-test.eml'), eml)
 
-    // Pass filename with .eml extension — should still resolve correctly
-    const result = await viewMessage(tempDir, 'fixture-test.eml', 'eml')
+    const result = await viewMessage(tempDir, 'INBOX/fixture-test.eml', 'eml')
     expect(result).toContain('From: test@example.com')
   })
 
-  it('rejects filenames containing path separators', async () => {
-    const messagesPath = path.join(tempDir, 'messages')
-    await fs.mkdir(messagesPath)
-
+  it('rejects paths containing .. traversal', async () => {
     await expect(
       viewMessage(tempDir, '../other/file', 'eml')
-    ).rejects.toThrow(/Invalid filename/)
+    ).rejects.toThrow(/Invalid filepath/)
   })
 
   it('throws for missing message file', async () => {
-    const messagesPath = path.join(tempDir, 'messages')
-    await fs.mkdir(messagesPath)
-
     await expect(
-      viewMessage(tempDir, '<nonexistent@example.com>', 'plaintext')
+      viewMessage(tempDir, 'INBOX/nonexistent', 'plaintext')
     ).rejects.toThrow(/Message not found/)
   })
 
   it('includes html part in json output when email has text/html content', async () => {
-    const messagesPath = path.join(tempDir, 'messages')
-    await fs.mkdir(messagesPath)
-
     const eml = [
       'From: test@example.com',
       'Subject: HTML Email',
@@ -435,9 +394,9 @@ Body`
       '--b--',
     ].join('\r\n')
 
-    await fs.writeFile(path.join(messagesPath, 'fixture-html.eml'), eml)
+    await fs.writeFile(path.join(tempDir, 'INBOX', 'fixture-html.eml'), eml)
 
-    const result = await viewMessage(tempDir, 'fixture-html', 'json') as Record<string, unknown>
+    const result = await viewMessage(tempDir, 'INBOX/fixture-html', 'json') as Record<string, unknown>
     const parts = result.parts as Array<{ type: string; content: string }>
     const htmlPart = parts.find(p => p.type === 'text/html')
     expect(htmlPart).toBeDefined()
@@ -445,9 +404,6 @@ Body`
   })
 
   it('includes base64-encoded attachments in json output', async () => {
-    const messagesPath = path.join(tempDir, 'messages')
-    await fs.mkdir(messagesPath)
-
     const eml = [
       'From: test@example.com',
       'Subject: Attachment',
@@ -467,9 +423,9 @@ Body`
       '--b--',
     ].join('\r\n')
 
-    await fs.writeFile(path.join(messagesPath, 'fixture-attachment.eml'), eml)
+    await fs.writeFile(path.join(tempDir, 'INBOX', 'fixture-attachment.eml'), eml)
 
-    const result = await viewMessage(tempDir, 'fixture-attachment', 'json') as Record<string, unknown>
+    const result = await viewMessage(tempDir, 'INBOX/fixture-attachment', 'json') as Record<string, unknown>
     const parts = result.parts as Array<{ type: string; content: string }>
     const attPart = parts.find(p => p.type === 'application/octet-stream')
     expect(attPart).toBeDefined()
@@ -531,7 +487,6 @@ describe('checkoutCommit', () => {
     const { execSync } = await import('node:child_process')
     const fixedDate = '2026-01-15'
 
-    // Make a second commit pinned to that date
     await fs.writeFile(path.join(repoDir, 'dated.txt'), 'dated')
     execSync('git add dated.txt', { cwd: repoDir })
     execSync('git commit -m "dated commit"', {

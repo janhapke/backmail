@@ -3,7 +3,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { ImapFlow } from 'imapflow'
-import { folderPathToFilename } from './sync.js'
 import { checkoutCommit } from './browse.js'
 
 // ── Public Interfaces ────────────────────────────────────────────────────────
@@ -110,6 +109,43 @@ export async function createFolderIfNeeded(
   }
 }
 
+// ── Internal Helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Walk the source directory tree and collect all folders that contain a
+ * .backmail_state.json file. Returns filesystem dir path + IMAP folder path.
+ */
+async function findFolderStates(
+  sourcePath: string,
+): Promise<Array<{ fsDirPath: string; imapPath: string }>> {
+  const results: Array<{ fsDirPath: string; imapPath: string }> = []
+
+  async function walk(dirPath: string): Promise<void> {
+    const entries = await fs.readdir(dirPath, { withFileTypes: true })
+    let stateFilePath: string | null = null
+    for (const entry of entries) {
+      if (entry.name === '.backmail_state.json' && !entry.isDirectory()) {
+        stateFilePath = path.join(dirPath, entry.name)
+      } else if (!entry.name.startsWith('.') && entry.isDirectory()) {
+        await walk(path.join(dirPath, entry.name))
+      }
+    }
+    if (stateFilePath) {
+      try {
+        const data: { folderPath?: string } = JSON.parse(await fs.readFile(stateFilePath, 'utf-8'))
+        if (data.folderPath) {
+          results.push({ fsDirPath: dirPath, imapPath: data.folderPath })
+        }
+      } catch {
+        // Skip malformed state files
+      }
+    }
+  }
+
+  await walk(sourcePath)
+  return results
+}
+
 // ── Main Function ────────────────────────────────────────────────────────────
 
 /**
@@ -162,44 +198,27 @@ export async function restoreAccount(
       await dryRunClient.connect()
     }
 
-    // List all folders from folders/*.json and create them on target
-    const folderFiles = await fs.readdir(path.join(sourcePath, 'folders'))
-
-    // Read folderPath from each JSON file
-    const folderPaths: string[] = []
-    for (const folderFilename of folderFiles.filter(f => f.endsWith('.json'))) {
-      try {
-        const folderJsonPath = path.join(sourcePath, 'folders', folderFilename)
-        const folderStateData: { folderPath?: string } = JSON.parse(await fs.readFile(folderJsonPath, 'utf-8'))
-        if (folderStateData.folderPath && typeof folderStateData.folderPath === 'string') {
-          folderPaths.push(folderStateData.folderPath)
-        }
-      } catch {
-        // Skip malformed JSON; caught again during message restoration
-        continue
-      }
-    }
+    // Walk the source directory tree to find all .backmail_state.json files
+    const folderEntries = await findFolderStates(sourcePath)
 
     // Create all folders on target before uploading messages
     if (targetClient) {
-      for (const folderPath of folderPaths) {
+      for (const { imapPath } of folderEntries) {
         try {
-          await createFolderIfNeeded(targetClient, folderPath)
-        } catch (err) {
-          // Folder creation error is fatal for that folder; continue with others
+          await createFolderIfNeeded(targetClient, imapPath)
+        } catch {
           result.errors++
         }
       }
     }
 
     // Restore messages from each folder
-    for (const folderPath of folderPaths) {
-      const folderFilename = folderPathToFilename(folderPath)
-      const folderJsonPath = path.join(sourcePath, 'folders', `${folderFilename}.json`)
+    for (const { fsDirPath, imapPath } of folderEntries) {
+      const stateFilePath = path.join(fsDirPath, '.backmail_state.json')
 
-      let folderState: { folderPath?: string; messages: Array<{ 'message-id': string; filename: string }> }
+      let folderState: { messages: Array<{ 'message-id': string; filename: string }> }
       try {
-        folderState = JSON.parse(await fs.readFile(folderJsonPath, 'utf-8'))
+        folderState = JSON.parse(await fs.readFile(stateFilePath, 'utf-8'))
       } catch {
         result.errors++
         continue
@@ -211,45 +230,32 @@ export async function restoreAccount(
         try {
           const searchClient = targetClient ?? dryRunClient
           if (options.skipDuplicates && searchClient) {
-            if (await isDuplicate(searchClient, folderPath, messageId)) {
+            if (await isDuplicate(searchClient, imapPath, messageId)) {
               result.skipped++
-              if (options.verbose) {
-                console.log(`Skipped: ${messageId}`)
-              }
+              if (options.verbose) console.log(`Skipped: ${messageId}`)
               continue
             }
           }
 
-          const emlPath = path.join(sourcePath, 'messages', `${msg.filename}.eml`)
+          const emlPath = path.join(fsDirPath, `${msg.filename}.eml`)
           const content = await fs.readFile(emlPath)
 
           if (targetClient) {
-            const lock = await targetClient.getMailboxLock(folderPath)
+            const lock = await targetClient.getMailboxLock(imapPath)
             try {
-              await targetClient.append(folderPath, content, [])
+              await targetClient.append(imapPath, content, [])
               result.uploaded++
-              if (options.verbose) {
-                console.log(`Uploaded: ${messageId}`)
-              }
+              if (options.verbose) console.log(`Uploaded: ${messageId}`)
             } finally {
-              try {
-                await lock.release()
-              } catch (_releaseErr) {
-                // Swallow cleanup errors to prevent masking append errors
-              }
+              try { await lock.release() } catch { /* swallow */ }
             }
           } else {
-            // Dry-run: count without appending
             result.uploaded++
-            if (options.verbose) {
-              console.log(`Uploaded: ${messageId}`)
-            }
+            if (options.verbose) console.log(`Uploaded: ${messageId}`)
           }
-        } catch (err) {
+        } catch {
           result.errors++
-          if (options.verbose) {
-            console.log(`Error: ${messageId}`)
-          }
+          if (options.verbose) console.log(`Error: ${messageId}`)
         }
       }
     }

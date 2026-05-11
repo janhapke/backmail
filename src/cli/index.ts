@@ -169,7 +169,7 @@ program
 // ── view ────────────────────────────────────────────────────────────────────
 program
   .command('view <filename>')
-  .description('View an email message (pass the filename stem from the messages/ directory, e.g. 2025-05-08_hello-world_a1b2c3d4)')
+  .description('View an email message (pass FOLDER/filename, e.g. INBOX/2025-05-08_hello-world_a1b2c3d4)')
   .option('--format <fmt>', 'output format: eml, plaintext, json', 'plaintext')
   .action(async (filename: string, opts: { format: string }) => {
     try {
