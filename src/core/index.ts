@@ -11,7 +11,7 @@ export { findRepository } from './discovery.js'
 
 // Sync
 export type { SyncResult, SyncOptions, FolderSyncResult } from './sync.js'
-export { syncAccount, reindexLocalFolders } from './sync.js'
+export { syncAccount, reindexLocalFolders, decodeMimeWords } from './sync.js'
 
 // Browse
 export type { MessageSummary } from './browse.js'

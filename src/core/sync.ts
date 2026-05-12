@@ -88,11 +88,24 @@ export function sanitizeMessageId(messageId: string): string {
 }
 
 // Decode RFC 2047 encoded-words in email header values (=?charset?B/Q?...?=)
-function decodeMimeWords(value: string): string {
+export function decodeMimeWords(value: string): string {
   return value.replace(/=\?([^?]+)\?([BQbq])\?([^?]*)\?=/g, (_, _charset, encoding, encoded) => {
     try {
       if (encoding.toUpperCase() === 'B') return Buffer.from(encoded, 'base64').toString('utf-8')
-      return encoded.replace(/_/g, ' ').replace(/=([0-9A-Fa-f]{2})/g, (_m: string, hex: string) => String.fromCharCode(parseInt(hex, 16)))
+      // Collect bytes into a Buffer before decoding as UTF-8 so multi-byte
+      // sequences (e.g. =C3=BC → ü) are reconstructed correctly.
+      const bytes: number[] = []
+      const src = encoded.replace(/_/g, ' ')
+      for (let i = 0; i < src.length; ) {
+        if (src[i] === '=' && i + 2 < src.length) {
+          bytes.push(parseInt(src.slice(i + 1, i + 3), 16))
+          i += 3
+        } else {
+          bytes.push(src.charCodeAt(i))
+          i++
+        }
+      }
+      return Buffer.from(bytes).toString('utf-8')
     } catch {
       return encoded
     }

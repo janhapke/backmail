@@ -14,6 +14,7 @@ import {
   formatCommitMessage,
   filterFolders,
   reindexLocalFolders,
+  decodeMimeWords,
 } from '../../src/core/sync.js'
 
 vi.mock('imapflow', () => ({
@@ -166,6 +167,102 @@ describe('messageFilename', () => {
     const source = 'Subject: =?UTF-8?B?SGVsbG8=?=\r\n\r\nbody'
     const result = messageFilename('<abc@example.com>', source)
     expect(result).toMatch(/^0000-00-00_hello_[0-9a-f]{8}$/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// decodeMimeWords — data-driven test suite
+// Add new cases as { encoded, expected } rows to the table below.
+// ---------------------------------------------------------------------------
+
+describe('decodeMimeWords', () => {
+  const cases: { label: string; encoded: string; expected: string }[] = [
+    // Plain text — no encoded words
+    {
+      label: 'plain ASCII passthrough',
+      encoded: 'Hello World',
+      expected: 'Hello World',
+    },
+
+    // Base64 (?B?) encoding
+    {
+      label: 'base64: simple ASCII',
+      encoded: '=?UTF-8?B?SGVsbG8gV29ybGQ=?=',
+      expected: 'Hello World',
+    },
+    {
+      label: 'base64: German umlaut ü (multi-byte UTF-8)',
+      encoded: '=?UTF-8?B?ZsO8cg==?=',
+      expected: 'für',
+    },
+    {
+      label: 'base64: emoji 🎉',
+      encoded: '=?UTF-8?B?8J+OiQ==?=',
+      expected: '🎉',
+    },
+    {
+      label: 'base64: Japanese (multi-byte)',
+      encoded: '=?UTF-8?B?44GT44KT44Gr44Gh44Gv?=',
+      expected: 'こんにちは',
+    },
+    {
+      label: 'base64: case-insensitive encoding marker ?b?',
+      encoded: '=?utf-8?b?SGVsbG8=?=',
+      expected: 'Hello',
+    },
+
+    // Quoted-printable (?Q?) encoding
+    {
+      label: 'QP: underscores become spaces',
+      encoded: '=?UTF-8?Q?Hello_World?=',
+      expected: 'Hello World',
+    },
+    {
+      label: 'QP: German umlaut ü as multi-byte =C3=BC',
+      encoded: '=?utf-8?q?f=C3=BCr?=',
+      expected: 'für',
+    },
+    {
+      label: 'QP: German umlaut ä as multi-byte =C3=A4',
+      encoded: '=?utf-8?q?M=C3=A4dchen?=',
+      expected: 'Mädchen',
+    },
+    {
+      label: 'QP: German umlaut ö as multi-byte =C3=B6',
+      encoded: '=?utf-8?q?sch=C3=B6n?=',
+      expected: 'schön',
+    },
+    {
+      label: 'QP: real-world subject with pipe and dots',
+      encoded: '=?utf-8?q?Deine_Personalisierung_f=C3=BCr_Oliver_Heldens_=7C_Hamburg_08=2E05=2E2026_ist_abgeschlossen?=',
+      expected: 'Deine Personalisierung für Oliver Heldens | Hamburg 08.05.2026 ist abgeschlossen',
+    },
+    {
+      label: 'QP: case-insensitive encoding marker ?q?',
+      encoded: '=?UTF-8?Q?caf=C3=A9?=',
+      expected: 'café',
+    },
+    {
+      label: 'QP: emoji via multi-byte sequence =F0=9F=8E=89',
+      encoded: '=?UTF-8?Q?=F0=9F=8E=89?=',
+      expected: '🎉',
+    },
+
+    // Multiple encoded words in one header value
+    {
+      label: 'multiple encoded words concatenated',
+      encoded: '=?UTF-8?B?SGVsbG8=?= =?UTF-8?B?V29ybGQ=?=',
+      expected: 'Hello World',
+    },
+    {
+      label: 'encoded word mixed with plain text',
+      encoded: 'Re: =?UTF-8?Q?Antwort_f=C3=BCr_dich?=',
+      expected: 'Re: Antwort für dich',
+    },
+  ]
+
+  it.each(cases)('$label', ({ encoded, expected }) => {
+    expect(decodeMimeWords(encoded)).toBe(expected)
   })
 })
 
