@@ -14,6 +14,10 @@ export interface SyncOptions {
   excludeFolders: string[]
   onlyFolders: string[]
   verbose: boolean
+  /** Re-download all messages, overwriting existing files. Git detects what changed. */
+  force?: boolean
+  /** Walk existing .eml files and rename them to match current filename logic. No IMAP needed. */
+  reindex?: boolean
   onLog?: (msg: string) => void
 }
 
@@ -21,12 +25,14 @@ export interface FolderSyncResult {
   path: string
   added: number
   removed: number
+  renamed: number
   error?: Error
 }
 
 export interface SyncResult {
   added: number
   removed: number
+  renamed: number
   partial: boolean
   repoInitialized: boolean
   folderResults: FolderSyncResult[]
@@ -43,6 +49,7 @@ interface FolderMessage {
 
 interface FolderState {
   folderPath: string
+  delimiter: string
   uidvalidity: string
   uidnext: number
   messages: FolderMessage[]
@@ -173,15 +180,20 @@ export function folderPathToFsPath(imapPath: string, delimiter: string): string 
  * Format the git commit message for a sync run.
  * Normal:  YYYY-MM-DD: +N added / -N removed
  * Partial: YYYY-MM-DD [partial]: +N added / -N removed
+ * Reindex: YYYY-MM-DD [reindex]: =N renamed
  */
 export function formatCommitMessage(
   added: number,
   removed: number,
   partial: boolean,
   date?: Date,
+  renamed?: number,
 ): string {
   const d = date ?? new Date()
   const iso = d.toISOString().slice(0, 10)
+  if (renamed !== undefined) {
+    return `${iso} [reindex]: =${renamed} renamed`
+  }
   if (partial) {
     return `${iso} [partial]: +${added} added / -${removed} removed`
   }
@@ -246,6 +258,140 @@ export async function ensureRepo(repoPath: string): Promise<boolean> {
 }
 
 /**
+ * Walk repoPath for all .backmail_state.json files and re-apply current filename
+ * logic to each known message. Files whose generated name has changed are renamed
+ * and the state is updated. No IMAP connection is needed.
+ */
+export async function reindexLocalFolders(
+  repoPath: string,
+  log: (msg: string) => void,
+): Promise<{ renamed: number; folderResults: FolderSyncResult[] }> {
+  let totalRenamed = 0
+  const folderResults: FolderSyncResult[] = []
+
+  let allEntries: string[]
+  try {
+    allEntries = await fs.readdir(repoPath, { recursive: true }) as string[]
+  } catch {
+    return { renamed: 0, folderResults: [] }
+  }
+
+  const stateFiles = allEntries.filter(f => path.basename(f) === '.backmail_state.json')
+
+  for (const relStateFile of stateFiles) {
+    const folderDirPath = path.join(repoPath, path.dirname(relStateFile))
+    const stateFilePath = path.join(repoPath, relStateFile)
+    let renamed = 0
+
+    let state: FolderState
+    try {
+      state = JSON.parse(await fs.readFile(stateFilePath, 'utf-8')) as FolderState
+    } catch {
+      continue
+    }
+
+    log(`reindex: ${state.folderPath}`)
+
+    const updatedMessages: FolderMessage[] = []
+    for (const msg of state.messages) {
+      const oldPath = path.join(folderDirPath, `${msg.filename}.eml`)
+      let content: Buffer
+      try {
+        content = await fs.readFile(oldPath)
+      } catch {
+        // .eml missing — keep the record as-is, file will be absent
+        updatedMessages.push(msg)
+        continue
+      }
+
+      const newFilename = messageFilename(msg['message-id'], content)
+      if (newFilename !== msg.filename) {
+        const newPath = path.join(folderDirPath, `${newFilename}.eml`)
+        await fs.rename(oldPath, newPath)
+        log(`  renamed: ${msg.filename} → ${newFilename}`)
+        renamed++
+        updatedMessages.push({ ...msg, filename: newFilename })
+      } else {
+        updatedMessages.push(msg)
+      }
+    }
+
+    if (renamed > 0) {
+      await fs.writeFile(stateFilePath, JSON.stringify({ ...state, messages: updatedMessages }, null, 2))
+      totalRenamed += renamed
+    }
+
+    folderResults.push({ path: state.folderPath, added: 0, removed: 0, renamed })
+  }
+
+  return { renamed: totalRenamed, folderResults }
+}
+
+// ── Internal: prune local folders absent from the server ────────────────────
+
+/**
+ * Returns true when imapPath would have been included in the current sync run.
+ * Uses stored delimiter for leaf-name matching; falls back to exact-path only when empty.
+ */
+function wouldPassFilter(
+  imapPath: string,
+  delimiter: string,
+  onlyFolders: string[],
+  excludeFolders: string[],
+): boolean {
+  const match = (name: string) =>
+    imapPath === name || (delimiter !== '' && imapPath.endsWith(delimiter + name))
+  if (onlyFolders.length > 0) return onlyFolders.some(match)
+  if (excludeFolders.length > 0) return !excludeFolders.some(match)
+  return true
+}
+
+async function pruneDeletedFolders(
+  repoPath: string,
+  allServerFolderPaths: Set<string>,
+  onlyFolders: string[],
+  excludeFolders: string[],
+  log: (msg: string) => void,
+): Promise<number> {
+  let removedMessages = 0
+
+  let allEntries: string[]
+  try {
+    allEntries = await fs.readdir(repoPath, { recursive: true }) as string[]
+  } catch {
+    return 0
+  }
+
+  const stateFiles = allEntries.filter(f => path.basename(f) === '.backmail_state.json')
+
+  for (const relStateFile of stateFiles) {
+    const folderDirPath = path.join(repoPath, path.dirname(relStateFile))
+    const stateFilePath = path.join(repoPath, relStateFile)
+
+    let state: FolderState
+    try {
+      state = JSON.parse(await fs.readFile(stateFilePath, 'utf-8')) as FolderState
+    } catch {
+      continue
+    }
+
+    const delimiter = state.delimiter ?? ''
+    const { folderPath } = state
+
+    // Only prune folders that would have been in scope for this sync run
+    if (!wouldPassFilter(folderPath, delimiter, onlyFolders, excludeFolders)) continue
+    // Still exists on the server — leave it alone
+    if (allServerFolderPaths.has(folderPath)) continue
+
+    log(`prune: ${folderPath} (folder no longer exists on server)`)
+    removedMessages += state.messages.length
+    await fs.rm(folderDirPath, { recursive: true, force: true })
+  }
+
+  return removedMessages
+}
+
+/**
  * Main sync function: fetch messages from IMAP, update local git repo
  */
 export async function syncAccount(
@@ -258,13 +404,28 @@ export async function syncAccount(
     throw new Error('--only-folder and --exclude-folder are mutually exclusive')
   }
 
+  const log = opts.verbose ? (opts.onLog ?? (() => {})) : () => {}
+
+  // ── Reindex mode: no IMAP, just rename local files ──────────────────────
+  if (opts.reindex) {
+    log('Running in reindex mode (no IMAP connection)')
+    const { renamed, folderResults } = await reindexLocalFolders(repoPath, log)
+
+    const git = simpleGit(repoPath)
+    const status = await git.status()
+    if (!status.isClean()) {
+      await git.add('.').catch(() => {})
+      await git.commit(formatCommitMessage(0, 0, false, undefined, renamed)).catch(() => {})
+    }
+
+    return { added: 0, removed: 0, renamed, partial: false, repoInitialized: false, folderResults }
+  }
+
+  // ── Normal / force sync ──────────────────────────────────────────────────
   const password = await getPasswordByRef(config.passwordRef)
 
   // Ensure repository exists
   const repoInitialized = await ensureRepo(repoPath)
-
-  // Base repo directory is created by ensureRepo; individual folder dirs are
-  // created lazily inside syncFolder when each folder is first synced.
 
   // Create IMAP client
   const client = new ImapFlow({
@@ -277,10 +438,9 @@ export async function syncAccount(
 
   let added = 0
   let removed = 0
-  let partial = false
   const folderResults: FolderSyncResult[] = []
 
-  const log = opts.verbose ? (opts.onLog ?? (() => {})) : () => {}
+  let partial = false
 
   try {
     log(`Connecting to ${config.host}:${config.port}...`)
@@ -297,7 +457,7 @@ export async function syncAccount(
     for (const folder of folders) {
       log(`Syncing folder: ${folder.path}`)
       try {
-        const folderResult = await syncFolder(client, folder, repoPath, log)
+        const folderResult = await syncFolder(client, folder, repoPath, opts.force ?? false, log)
         added += folderResult.added
         removed += folderResult.removed
         folderResults.push(folderResult)
@@ -307,10 +467,23 @@ export async function syncAccount(
           path: folder.path,
           added: 0,
           removed: 0,
+          renamed: 0,
           error: err as Error,
         })
       }
     }
+
+    // Prune local folders that have been deleted or renamed on the server
+    const allServerFolderPaths = new Set(rawFolders.map(f => f.path))
+    const pruned = await pruneDeletedFolders(
+      repoPath,
+      allServerFolderPaths,
+      opts.onlyFolders,
+      opts.excludeFolders,
+      log,
+    )
+    removed += pruned
+
   } catch (err) {
     // Connection-level error: mark partial only if we already wrote something
     if (added > 0 || removed > 0) {
@@ -336,7 +509,7 @@ export async function syncAccount(
     }
   }
 
-  return { added, removed, partial, repoInitialized, folderResults }
+  return { added, removed, renamed: 0, partial, repoInitialized, folderResults }
 }
 
 // ── Internal Helper: Sync a Single Folder ────────────────────────────────────
@@ -345,6 +518,7 @@ async function syncFolder(
   client: InstanceType<typeof ImapFlow>,
   folder: { path: string; delimiter: string; flags: Set<string> },
   repoPath: string,
+  force: boolean,
   log: (msg: string) => void,
 ): Promise<FolderSyncResult> {
   const folderFsPath = folderPathToFsPath(folder.path, folder.delimiter)
@@ -365,6 +539,15 @@ async function syncFolder(
 
   let added = 0
   let removed = 0
+
+  // Force mode: delete all existing .eml files and treat as a fresh sync so
+  // every message is re-downloaded with the current filename logic applied.
+  if (force && storedState) {
+    for (const msg of storedState.messages) {
+      await fs.unlink(path.join(folderDirPath, `${msg.filename}.eml`)).catch(() => {})
+    }
+    storedState = null
+  }
 
   // Get mailbox lock
   const lock = await client.getMailboxLock(folder.path)
@@ -456,6 +639,7 @@ async function syncFolder(
     // Write updated folder state
     const updatedState: FolderState = {
       folderPath: folder.path,
+      delimiter: folder.delimiter,
       uidvalidity: serverValidity.toString(),
       uidnext: serverUidNext,
       messages: [...keptMessages, ...newMessages],
@@ -465,5 +649,5 @@ async function syncFolder(
     lock.release()
   }
 
-  return { path: folder.path, added, removed }
+  return { path: folder.path, added, removed, renamed: 0 }
 }

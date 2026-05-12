@@ -62,7 +62,9 @@ program
   .option('--exclude-folder <name>', 'skip this folder (repeatable)', collectRepeatable, [])
   .option('--only-folder <name>', 'restrict to this folder (repeatable)', collectRepeatable, [])
   .option('--verbose', 'log one line per folder and per message')
-  .action(async (opts: { excludeFolder: string[]; onlyFolder: string[]; verbose?: boolean }) => {
+  .option('--force', 're-download all messages and overwrite local copies')
+  .option('--reindex', 'rename existing .eml files to match current filename logic (no IMAP)')
+  .action(async (opts: { excludeFolder: string[]; onlyFolder: string[]; verbose?: boolean; force?: boolean; reindex?: boolean }) => {
     if (opts.excludeFolder.length > 0 && opts.onlyFolder.length > 0) {
       console.error('Error: --exclude-folder and --only-folder are mutually exclusive')
       process.exit(1)
@@ -78,14 +80,22 @@ program
         excludeFolders: opts.excludeFolder,
         onlyFolders: opts.onlyFolder,
         verbose,
+        force: opts.force ?? false,
+        reindex: opts.reindex ?? false,
         onLog: verbose ? (msg) => console.log(msg) : undefined,
       })
 
       if (result.repoInitialized) {
         console.log(`Initialized git repo at ${archivePath}`)
       }
-      const partialTag = result.partial ? ' [partial]' : ''
-      console.log(`sync${partialTag}: +${result.added} added / -${result.removed} removed`)
+
+      if (opts.reindex) {
+        console.log(`reindex: =${result.renamed} renamed`)
+      } else {
+        const partialTag = result.partial ? ' [partial]' : ''
+        console.log(`sync${partialTag}: +${result.added} added / -${result.removed} removed`)
+      }
+
       // Per-folder error surfacing
       for (const fr of result.folderResults) {
         if (fr.error) {

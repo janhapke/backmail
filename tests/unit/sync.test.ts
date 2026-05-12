@@ -13,6 +13,7 @@ import {
   folderPathToFsPath,
   formatCommitMessage,
   filterFolders,
+  reindexLocalFolders,
 } from '../../src/core/sync.js'
 
 vi.mock('imapflow', () => ({
@@ -216,6 +217,11 @@ describe('formatCommitMessage (SYNC-02, D-07, D-08)', () => {
     const result = formatCommitMessage(0, 0, false, new Date('2026-04-21T10:00:00Z'))
     expect(result).toMatch(/^\d{4}-\d{2}-\d{2}:.*\+0.*-0/)
   })
+
+  it('formats reindex commit with [reindex] marker and renamed count', () => {
+    const result = formatCommitMessage(0, 0, false, new Date('2026-04-21T10:00:00Z'), 3)
+    expect(result).toBe('2026-04-21 [reindex]: =3 renamed')
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -273,6 +279,7 @@ describe('SyncResult / FolderState schema (SYNC-04)', () => {
     const result: Awaited<ReturnType<typeof syncAccount>> = {
       added: 0,
       removed: 0,
+      renamed: 0,
       partial: false,
       repoInitialized: false,
       folderResults: [],
@@ -801,5 +808,412 @@ describe('syncAccount — mutual-exclusion guard', () => {
         { onlyFolders: ['INBOX'], excludeFolders: ['Trash'], verbose: false },
       )
     ).rejects.toThrow('mutually exclusive')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// reindexLocalFolders — rename .eml files to match current filename logic
+// ---------------------------------------------------------------------------
+
+describe('reindexLocalFolders', () => {
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backmail-reindex-'))
+    fs.mkdirSync(path.join(tmpDir, 'INBOX'), { recursive: true })
+  })
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('renames .eml file when stored filename differs from current messageFilename output', async () => {
+    // Write a state file that has an old/wrong filename for a message
+    const source = [
+      'Date: Mon, 01 Jan 2024 12:00:00 +0000',
+      'Subject: Hello World',
+      '',
+      'body',
+    ].join('\r\n')
+    const msgId = '<hello@example.com>'
+    const correctFilename = messageFilename(msgId, source)
+    const staleFilename = 'old-stale-name'
+
+    const state = {
+      folderPath: 'INBOX',
+      delimiter: '/',
+      uidvalidity: '1',
+      uidnext: 2,
+      messages: [{ uid: 1, 'message-id': msgId, filename: staleFilename, flags: [] }],
+    }
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', '.backmail_state.json'), JSON.stringify(state))
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', `${staleFilename}.eml`), source)
+
+    const result = await reindexLocalFolders(tmpDir, () => {})
+
+    expect(result.renamed).toBe(1)
+    expect(fs.existsSync(path.join(tmpDir, 'INBOX', `${correctFilename}.eml`))).toBe(true)
+    expect(fs.existsSync(path.join(tmpDir, 'INBOX', `${staleFilename}.eml`))).toBe(false)
+
+    const updatedState = JSON.parse(fs.readFileSync(path.join(tmpDir, 'INBOX', '.backmail_state.json'), 'utf-8'))
+    expect(updatedState.messages[0].filename).toBe(correctFilename)
+  })
+
+  it('does not rename .eml file when stored filename already matches', async () => {
+    const source = 'Date: Mon, 01 Jan 2024 12:00:00 +0000\r\nSubject: Same\r\n\r\nbody'
+    const msgId = '<same@example.com>'
+    const correctFilename = messageFilename(msgId, source)
+
+    const state = {
+      folderPath: 'INBOX',
+      delimiter: '/',
+      uidvalidity: '1',
+      uidnext: 2,
+      messages: [{ uid: 1, 'message-id': msgId, filename: correctFilename, flags: [] }],
+    }
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', '.backmail_state.json'), JSON.stringify(state))
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', `${correctFilename}.eml`), source)
+
+    const result = await reindexLocalFolders(tmpDir, () => {})
+
+    expect(result.renamed).toBe(0)
+    expect(fs.existsSync(path.join(tmpDir, 'INBOX', `${correctFilename}.eml`))).toBe(true)
+    // State file should NOT be rewritten when nothing changed
+    const updatedState = JSON.parse(fs.readFileSync(path.join(tmpDir, 'INBOX', '.backmail_state.json'), 'utf-8'))
+    expect(updatedState.messages[0].filename).toBe(correctFilename)
+  })
+
+  it('skips gracefully when .eml file is missing from disk', async () => {
+    const state = {
+      folderPath: 'INBOX',
+      delimiter: '/',
+      uidvalidity: '1',
+      uidnext: 2,
+      messages: [{ uid: 1, 'message-id': '<missing@example.com>', filename: 'does-not-exist', flags: [] }],
+    }
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', '.backmail_state.json'), JSON.stringify(state))
+    // No .eml file written
+
+    const result = await reindexLocalFolders(tmpDir, () => {})
+
+    expect(result.renamed).toBe(0)
+    expect(result.folderResults).toHaveLength(1)
+    expect(result.folderResults[0].error).toBeUndefined()
+  })
+
+  it('returns empty result for a non-existent repoPath without throwing', async () => {
+    const result = await reindexLocalFolders('/tmp/does-not-exist-backmail-xyz', () => {})
+    expect(result.renamed).toBe(0)
+    expect(result.folderResults).toHaveLength(0)
+  })
+
+  it('handles multiple folders, renaming only stale entries', async () => {
+    fs.mkdirSync(path.join(tmpDir, 'Sent'), { recursive: true })
+
+    const source = 'Date: Mon, 01 Jan 2024 12:00:00 +0000\r\nSubject: Hi\r\n\r\nbody'
+    const msgId = '<multi@example.com>'
+    const correct = messageFilename(msgId, source)
+
+    // INBOX: stale filename
+    const inboxState = {
+      folderPath: 'INBOX',
+      delimiter: '/',
+      uidvalidity: '1',
+      uidnext: 2,
+      messages: [{ uid: 1, 'message-id': msgId, filename: 'stale-inbox', flags: [] }],
+    }
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', '.backmail_state.json'), JSON.stringify(inboxState))
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', 'stale-inbox.eml'), source)
+
+    // Sent: already correct filename
+    const sentState = {
+      folderPath: 'Sent',
+      delimiter: '/',
+      uidvalidity: '1',
+      uidnext: 2,
+      messages: [{ uid: 2, 'message-id': msgId, filename: correct, flags: [] }],
+    }
+    fs.writeFileSync(path.join(tmpDir, 'Sent', '.backmail_state.json'), JSON.stringify(sentState))
+    fs.writeFileSync(path.join(tmpDir, 'Sent', `${correct}.eml`), source)
+
+    const result = await reindexLocalFolders(tmpDir, () => {})
+
+    expect(result.renamed).toBe(1)
+    expect(result.folderResults).toHaveLength(2)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// syncAccount --force: re-downloads all messages, deletes old .eml files first
+// ---------------------------------------------------------------------------
+
+describe('syncAccount --force', () => {
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backmail-force-'))
+    fs.mkdirSync(path.join(tmpDir, 'INBOX'), { recursive: true })
+  })
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('deletes existing .eml files before re-downloading when force=true', async () => {
+    const storedState = {
+      folderPath: 'INBOX',
+      delimiter: '/',
+      uidvalidity: '1',
+      uidnext: 2,
+      messages: [{ uid: 1, 'message-id': '<existing@example.com>', filename: 'old-name', flags: [] }],
+    }
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', '.backmail_state.json'), JSON.stringify(storedState))
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', 'old-name.eml'), 'old content')
+
+    vi.mocked(ImapFlow).mockImplementationOnce(function () {
+      return {
+        connect: vi.fn().mockResolvedValue(undefined),
+        logout: vi.fn().mockResolvedValue(undefined),
+        list: vi.fn().mockResolvedValue([{ path: 'INBOX', delimiter: '/', flags: new Set() }]),
+        getMailboxLock: vi.fn().mockResolvedValue({ release: vi.fn() }),
+        fetch: vi.fn().mockImplementation(async function* () {
+          yield {
+            uid: 1,
+            envelope: { messageId: '<existing@example.com>' },
+            source: Buffer.from('Date: Mon, 01 Jan 2024 12:00:00 +0000\r\nSubject: Existing\r\n\r\nbody'),
+            flags: new Set<string>(),
+          }
+        }),
+        search: vi.fn().mockResolvedValue([1]),
+        mailbox: { uidValidity: 1n, uidNext: 2 },
+      }
+    } as any)
+
+    const result = await syncAccount(
+      { host: 'localhost', port: 993, username: 'u', tls: true, passwordRef: 'keyring:service=test;account=test' },
+      tmpDir,
+      { excludeFolders: [], onlyFolders: [], verbose: false, force: true },
+    )
+
+    expect(result.added).toBe(1)
+    // Old file with old name must be gone
+    expect(fs.existsSync(path.join(tmpDir, 'INBOX', 'old-name.eml'))).toBe(false)
+  })
+
+  it('fetches from 1:* even when existing state has messages (force clears state)', async () => {
+    const storedState = {
+      folderPath: 'INBOX',
+      delimiter: '/',
+      uidvalidity: '1',
+      uidnext: 6,
+      messages: [{ uid: 5, 'message-id': '<existing@example.com>', filename: 'old-name', flags: [] }],
+    }
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', '.backmail_state.json'), JSON.stringify(storedState))
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', 'old-name.eml'), 'old content')
+
+    const fetchMock = vi.fn().mockImplementation(async function* () {
+      yield {
+        uid: 5,
+        envelope: { messageId: '<existing@example.com>' },
+        source: Buffer.from('Date: Mon, 01 Jan 2024 12:00:00 +0000\r\nSubject: Existing\r\n\r\nbody'),
+        flags: new Set<string>(),
+      }
+    })
+
+    vi.mocked(ImapFlow).mockImplementationOnce(function () {
+      return {
+        connect: vi.fn().mockResolvedValue(undefined),
+        logout: vi.fn().mockResolvedValue(undefined),
+        list: vi.fn().mockResolvedValue([{ path: 'INBOX', delimiter: '/', flags: new Set() }]),
+        getMailboxLock: vi.fn().mockResolvedValue({ release: vi.fn() }),
+        fetch: fetchMock,
+        search: vi.fn().mockResolvedValue([5]),
+        mailbox: { uidValidity: 1n, uidNext: 6 },
+      }
+    } as any)
+
+    await syncAccount(
+      { host: 'localhost', port: 993, username: 'u', tls: true, passwordRef: 'keyring:service=test;account=test' },
+      tmpDir,
+      { excludeFolders: [], onlyFolders: [], verbose: false, force: true },
+    )
+
+    // With force, storedState is cleared → lastUid=0 → range '1:*'
+    expect(fetchMock).toHaveBeenCalledWith('1:*', expect.anything(), expect.anything())
+  })
+})
+
+// ---------------------------------------------------------------------------
+// syncAccount — folder pruning: delete local folders absent from server
+// ---------------------------------------------------------------------------
+
+describe('syncAccount — folder pruning', () => {
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backmail-prune-'))
+    // INBOX exists locally and on server
+    fs.mkdirSync(path.join(tmpDir, 'INBOX'), { recursive: true })
+    // OldFolder exists locally but will NOT be on the server
+    fs.mkdirSync(path.join(tmpDir, 'OldFolder'), { recursive: true })
+  })
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('removes a local folder directory that no longer exists on the server', async () => {
+    // Seed OldFolder with a state and .eml so there is something to delete
+    const oldState = {
+      folderPath: 'OldFolder',
+      delimiter: '/',
+      uidvalidity: '1',
+      uidnext: 2,
+      messages: [{ uid: 1, 'message-id': '<old@example.com>', filename: 'old-mail', flags: [] }],
+    }
+    fs.writeFileSync(path.join(tmpDir, 'OldFolder', '.backmail_state.json'), JSON.stringify(oldState))
+    fs.writeFileSync(path.join(tmpDir, 'OldFolder', 'old-mail.eml'), 'old mail')
+
+    // Server only knows about INBOX (OldFolder is gone)
+    vi.mocked(ImapFlow).mockImplementationOnce(function () {
+      return {
+        connect: vi.fn().mockResolvedValue(undefined),
+        logout: vi.fn().mockResolvedValue(undefined),
+        list: vi.fn().mockResolvedValue([{ path: 'INBOX', delimiter: '/', flags: new Set() }]),
+        getMailboxLock: vi.fn().mockResolvedValue({ release: vi.fn() }),
+        fetch: vi.fn().mockImplementation(async function* () {}),
+        search: vi.fn().mockResolvedValue([]),
+        mailbox: { uidValidity: 1n, uidNext: 1 },
+      }
+    } as any)
+
+    const result = await syncAccount(
+      { host: 'localhost', port: 993, username: 'u', tls: true, passwordRef: 'keyring:service=test;account=test' },
+      tmpDir,
+      { excludeFolders: [], onlyFolders: [], verbose: false },
+    )
+
+    expect(result.removed).toBeGreaterThanOrEqual(1)
+    expect(fs.existsSync(path.join(tmpDir, 'OldFolder'))).toBe(false)
+  })
+
+  it('does NOT prune a local folder when --only-folder restricts scope to a different folder', async () => {
+    // OldFolder exists locally; server returns both INBOX and OldFolder
+    // but we only sync INBOX via --only-folder
+    const oldState = {
+      folderPath: 'OldFolder',
+      delimiter: '/',
+      uidvalidity: '1',
+      uidnext: 2,
+      messages: [],
+    }
+    fs.writeFileSync(path.join(tmpDir, 'OldFolder', '.backmail_state.json'), JSON.stringify(oldState))
+
+    vi.mocked(ImapFlow).mockImplementationOnce(function () {
+      return {
+        connect: vi.fn().mockResolvedValue(undefined),
+        logout: vi.fn().mockResolvedValue(undefined),
+        // Server knows both folders; filter will restrict to INBOX only
+        list: vi.fn().mockResolvedValue([
+          { path: 'INBOX', delimiter: '/', flags: new Set() },
+          { path: 'OldFolder', delimiter: '/', flags: new Set() },
+        ]),
+        getMailboxLock: vi.fn().mockResolvedValue({ release: vi.fn() }),
+        fetch: vi.fn().mockImplementation(async function* () {}),
+        search: vi.fn().mockResolvedValue([]),
+        mailbox: { uidValidity: 1n, uidNext: 1 },
+      }
+    } as any)
+
+    await syncAccount(
+      { host: 'localhost', port: 993, username: 'u', tls: true, passwordRef: 'keyring:service=test;account=test' },
+      tmpDir,
+      { excludeFolders: [], onlyFolders: ['INBOX'], verbose: false },
+    )
+
+    // OldFolder is on the server and not in our --only-folder scope → must NOT be pruned
+    expect(fs.existsSync(path.join(tmpDir, 'OldFolder'))).toBe(true)
+  })
+
+  it('does NOT prune a folder that is excluded via --exclude-folder', async () => {
+    const excludedState = {
+      folderPath: 'Spam',
+      delimiter: '/',
+      uidvalidity: '1',
+      uidnext: 2,
+      messages: [],
+    }
+    fs.mkdirSync(path.join(tmpDir, 'Spam'), { recursive: true })
+    fs.writeFileSync(path.join(tmpDir, 'Spam', '.backmail_state.json'), JSON.stringify(excludedState))
+
+    // Server knows INBOX only (Spam was deleted too), but Spam is excluded from our sync
+    vi.mocked(ImapFlow).mockImplementationOnce(function () {
+      return {
+        connect: vi.fn().mockResolvedValue(undefined),
+        logout: vi.fn().mockResolvedValue(undefined),
+        list: vi.fn().mockResolvedValue([{ path: 'INBOX', delimiter: '/', flags: new Set() }]),
+        getMailboxLock: vi.fn().mockResolvedValue({ release: vi.fn() }),
+        fetch: vi.fn().mockImplementation(async function* () {}),
+        search: vi.fn().mockResolvedValue([]),
+        mailbox: { uidValidity: 1n, uidNext: 1 },
+      }
+    } as any)
+
+    await syncAccount(
+      { host: 'localhost', port: 993, username: 'u', tls: true, passwordRef: 'keyring:service=test;account=test' },
+      tmpDir,
+      { excludeFolders: ['Spam'], onlyFolders: [], verbose: false },
+    )
+
+    // Spam is excluded from this sync run, so it must not be pruned even if absent from server
+    expect(fs.existsSync(path.join(tmpDir, 'Spam'))).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// syncAccount --reindex: renames files without connecting to IMAP
+// ---------------------------------------------------------------------------
+
+describe('syncAccount --reindex', () => {
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backmail-reindex-account-'))
+    fs.mkdirSync(path.join(tmpDir, 'INBOX'), { recursive: true })
+  })
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('returns renamed count and does not call ImapFlow constructor', async () => {
+    const source = 'Date: Mon, 01 Jan 2024 12:00:00 +0000\r\nSubject: Hi\r\n\r\nbody'
+    const msgId = '<reindex-test@example.com>'
+    const correct = messageFilename(msgId, source)
+
+    const state = {
+      folderPath: 'INBOX',
+      delimiter: '/',
+      uidvalidity: '1',
+      uidnext: 2,
+      messages: [{ uid: 1, 'message-id': msgId, filename: 'stale-name', flags: [] }],
+    }
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', '.backmail_state.json'), JSON.stringify(state))
+    fs.writeFileSync(path.join(tmpDir, 'INBOX', 'stale-name.eml'), source)
+
+    vi.mocked(ImapFlow).mockClear()
+
+    const result = await syncAccount(
+      { host: 'localhost', port: 993, username: 'u', tls: true, passwordRef: 'keyring:service=test;account=test' },
+      tmpDir,
+      { excludeFolders: [], onlyFolders: [], verbose: false, reindex: true },
+    )
+
+    expect(result.renamed).toBe(1)
+    expect(result.added).toBe(0)
+    expect(result.removed).toBe(0)
+    // ImapFlow must NOT be instantiated in reindex mode
+    expect(vi.mocked(ImapFlow)).not.toHaveBeenCalled()
+    expect(fs.existsSync(path.join(tmpDir, 'INBOX', `${correct}.eml`))).toBe(true)
   })
 })
