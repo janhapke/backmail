@@ -108,8 +108,8 @@ function extractRawHeader(unfolded: string, name: string): string {
 // Unfold and extract just the header section from raw email bytes.
 function parseHeaderBlock(rawSource: Buffer | string): string {
   const text = typeof rawSource === 'string'
-    ? rawSource.slice(0, 8192)
-    : rawSource.subarray(0, 8192).toString('utf-8')
+    ? rawSource.slice(0, 65536)
+    : rawSource.subarray(0, 65536).toString('utf-8')
   const headerSection = text.split(/\r?\n\r?\n/)[0] ?? text
   return headerSection.replace(/\r?\n([ \t])/g, ' ')
 }
