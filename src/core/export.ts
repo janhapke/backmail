@@ -32,8 +32,13 @@ export interface FolderExportResult {
 // ── HTML → Markdown ───────────────────────────────────────────────────────────
 
 export function preprocessHtml(html: string): string {
+  // Strip invisible filler characters used as spacers in HTML email
+  // (soft hyphen U+00AD, zero-width space U+200B, zero-width non-joiner U+200C,
+  //  zero-width joiner U+200D, BOM/zero-width no-break space U+FEFF)
+  let out = html.replace(/[\u00ad\u200b\u200c\u200d\ufeff]/g, '')
+
   // Strip <style> and <script> blocks
-  let out = html.replace(/<style[\s\S]*?<\/style>/gi, '')
+  out = out.replace(/<style[\s\S]*?<\/style>/gi, '')
   out = out.replace(/<script[\s\S]*?<\/script>/gi, '')
 
   // Strip tracking-pixel <img> tags: width/height attr ≤ 1 or inline style width:0/height:0
@@ -57,15 +62,119 @@ export function preprocessHtml(html: string): string {
   return out
 }
 
+// ── Smart table rules ─────────────────────────────────────────────────────────
+// Layout tables (no <th> in first row, or role="presentation") are unwrapped to
+// prose. Data tables (first row all <th>) are kept as GFM pipe tables.
+
+function tableHasHeadingRow(table: any): boolean {
+  if (typeof table.getAttribute === 'function' && table.getAttribute('role') === 'presentation') {
+    return false
+  }
+  if (!table.rows || table.rows.length === 0) return false
+  const firstRow = table.rows[0]
+  let cellCount = 0
+  for (const child of Array.from(firstRow.childNodes as Iterable<any>)) {
+    if (child.nodeType !== 1) continue
+    cellCount++
+    if (child.nodeName !== 'TH') return false
+  }
+  return cellCount > 0
+}
+
+function findAncestorTable(node: any): any {
+  for (let n = node.parentNode; n; n = n.parentNode) {
+    if (n.nodeName === 'TABLE') return n
+  }
+  return null
+}
+
+function gfmPipeCell(content: string, node: any): string {
+  const index = Array.prototype.indexOf.call(node.parentNode.childNodes, node)
+  return (index === 0 ? '| ' : ' ') + content + ' |'
+}
+
+function isFirstTbody(node: any): boolean {
+  const prev = node.previousSibling
+  return (
+    node.nodeName === 'TBODY' &&
+    (!prev || (prev.nodeName === 'THEAD' && /^\s*$/.test(prev.textContent || '')))
+  )
+}
+
+function isGfmHeadingRow(tr: any): boolean {
+  const parent = tr.parentNode
+  const allTh = Array.prototype.every.call(tr.childNodes, (n: any) => n.nodeName === 'TH')
+  return (
+    parent.nodeName === 'THEAD' ||
+    (parent.firstChild === tr &&
+      allTh &&
+      (parent.nodeName === 'TABLE' || isFirstTbody(parent)))
+  )
+}
+
+function configureSmartTableRules(service: TurndownService): void {
+  // These override GFM's rules by reusing the same key names, preserving rule
+  // priority order while replacing the implementation.
+
+  service.addRule('tableCell', {
+    filter: ['th', 'td'],
+    replacement(content: string, node: any): string {
+      const table = findAncestorTable(node)
+      if (!table || !tableHasHeadingRow(table)) {
+        const trimmed = content.trim()
+        return trimmed ? '\n\n' + trimmed + '\n\n' : ''
+      }
+      return gfmPipeCell(content, node)
+    },
+  })
+
+  service.addRule('tableRow', {
+    filter: 'tr',
+    replacement(content: string, node: any): string {
+      const table = findAncestorTable(node)
+      if (!table || !tableHasHeadingRow(table)) return content
+      if (isGfmHeadingRow(node)) {
+        let border = ''
+        for (const n of Array.from(node.childNodes as Iterable<any>)) {
+          if (n.nodeType === 1) border += gfmPipeCell('---', n)
+        }
+        return '\n' + content + '\n' + border
+      }
+      return '\n' + content
+    },
+  })
+
+  service.addRule('table', {
+    filter: 'table',
+    replacement(content: string, node: any): string {
+      if (!tableHasHeadingRow(node)) {
+        const prose = content.replace(/\n{2,}/g, '\n').trim()
+        return prose ? '\n\n' + prose + '\n\n' : ''
+      }
+      return '\n\n' + content + '\n\n'
+    },
+  })
+}
+
 export function htmlToMarkdown(html: string): string {
   const cleaned = preprocessHtml(html)
 
   const td = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' })
   td.use(gfm)
-  const md = td.turndown(cleaned)
+  configureSmartTableRules(td)
+  let md = td.turndown(cleaned)
 
-  // Collapse 3+ consecutive blank lines to 2
-  return md.replace(/\n{3,}/g, '\n\n')
+  // (a) Replace Unicode non-breaking / decorative spaces with plain space
+  md = md.replace(/[\u00a0\u1680\u2002\u2003\u2009\u200a\u202f]/g, ' ')
+  // (b) Trim trailing whitespace from every line
+  md = md.replace(/[ \t]+$/gm, '')
+  // (d) Convert Turndown-escaped visual bullets (\* / \-) to real list items.
+  //     Also strips leading whitespace so 4+-space indent doesn't trigger code blocks.
+  md = md.replace(/^[ \t]*\\([*-]) /gm, '- ')
+  // (c) Collapse 3+ consecutive newlines to 2
+  md = md.replace(/\n{3,}/g, '\n\n')
+
+  return md
 }
 
 // ── Plain text → Markdown ─────────────────────────────────────────────────────
@@ -79,7 +188,7 @@ const MANUAL_LIST_RE = /^[ ]*(?:[-*][ \t]|\d+\.[ \t])/
 const DIVIDER_RE = /^[-=]{2,}\s*$/
 
 function escapeHtml(s: string): string {
-  return s.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return s.replace(/</g, '&lt;')
 }
 
 interface ConvertedLine {
@@ -95,8 +204,13 @@ function classifyLine(line: string): ConvertedLine {
   if (line === '') return { out: '', isBlock: false, isDivider: false }
   if (DIVIDER_RE.test(line)) return { out: '---', isBlock: false, isDivider: true }
   if (MANUAL_LIST_RE.test(line)) return { out: escapeHtml(line), isBlock: true, isDivider: false }
-  // Escape leading # to prevent ATX heading interpretation
-  const escaped = ATX_HEADING_RE.test(line) ? '\\' + escapeHtml(line) : escapeHtml(line)
+  // Blockquote lines (email quote marker >) are treated as block elements so they
+  // neither receive nor trigger hard-break markers on adjacent lines.
+  if (line.startsWith('>')) return { out: escapeHtml(line), isBlock: true, isDivider: false }
+  // Escape the # to prevent ATX heading interpretation, preserving any leading spaces
+  const escaped = ATX_HEADING_RE.test(line)
+    ? escapeHtml(line).replace(/^([ ]{0,3})(#{1,6})/, '$1\\$2')
+    : escapeHtml(line)
   return { out: escaped, isBlock: false, isDivider: false }
 }
 

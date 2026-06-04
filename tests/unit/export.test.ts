@@ -50,6 +50,14 @@ describe('preprocessHtml', () => {
     const html = '<img src="photo.jpg" width="800" height="600"><p>Text</p>'
     expect(preprocessHtml(html)).toContain('<img')
   })
+
+  it('strips soft hyphens and zero-width spaces used as email spacers', () => {
+    const html = '<td>­</td><td>Text</td><td>​</td>'
+    const result = preprocessHtml(html)
+    expect(result).not.toContain('­')
+    expect(result).not.toContain('​')
+    expect(result).toContain('Text')
+  })
 })
 
 // ── htmlToMarkdown ────────────────────────────────────────────────────────────
@@ -60,12 +68,115 @@ describe('htmlToMarkdown', () => {
     expect(result).toContain('**Hello**')
   })
 
+  it('replaces non-breaking spaces with regular spaces', () => {
+    const result = htmlToMarkdown('<p>Hello World</p>')
+    expect(result).not.toContain(' ')
+    expect(result).toContain('Hello World')
+  })
+
+  it('trims trailing whitespace from lines', () => {
+    const result = htmlToMarkdown('<p>Hello   </p><p>World</p>')
+    expect(result).not.toMatch(/[ \t]+\n/)
+    expect(result).not.toMatch(/[ \t]+$/)
+  })
+
+  it('collapses 3+ consecutive newlines to 2', () => {
+    const html = '<p>A</p><p></p><p></p><p></p><p>B</p>'
+    const result = htmlToMarkdown(html)
+    expect(result).not.toMatch(/\n{3,}/)
+  })
+
+  it('converts escaped visual bullets with leading spaces to real list items', () => {
+    // &nbsp;&nbsp;&nbsp;* text is a common email pattern for visual lists
+    const html = '<p>&nbsp;&nbsp;&nbsp;&nbsp;* Item one<br>&nbsp;&nbsp;&nbsp;&nbsp;* Item two</p>'
+    const result = htmlToMarkdown(html)
+    expect(result).not.toContain('\\*')
+    expect(result).toContain('- Item one')
+    expect(result).toContain('- Item two')
+  })
+
+  it('does not convert \\* in the middle of a line', () => {
+    // Only line-leading escaped bullets should become list items
+    const html = '<p>Price is 5 \\* 3 = 15</p>'
+    const result = htmlToMarkdown(html)
+    expect(result).toContain('5')
+    expect(result).toContain('3')
+  })
+
   it('collapses 4+ consecutive blank lines to 2', () => {
     // Force 4+ blank lines by injecting them after conversion
     // We test by passing content that will produce multiple blank lines
     const html = '<p>A</p><p></p><p></p><p></p><p>B</p>'
     const result = htmlToMarkdown(html)
     expect(result).not.toMatch(/\n{4,}/)
+  })
+
+  describe('table handling', () => {
+    it('unwraps a layout table (no <th>) to prose — no pipe characters', () => {
+      const html = `<table>
+        <tr><td>Hello</td><td>World</td></tr>
+        <tr><td>Foo</td><td>Bar</td></tr>
+      </table>`
+      const result = htmlToMarkdown(html)
+      expect(result).not.toContain('|')
+      expect(result).toContain('Hello')
+      expect(result).toContain('World')
+    })
+
+    it('unwraps a table with role="presentation" even if it has <th>', () => {
+      const html = `<table role="presentation">
+        <tr><th>Name</th><th>Value</th></tr>
+        <tr><td>foo</td><td>bar</td></tr>
+      </table>`
+      const result = htmlToMarkdown(html)
+      expect(result).not.toContain('|')
+      expect(result).toContain('Name')
+      expect(result).toContain('foo')
+    })
+
+    it('preserves a data table (first row all <th>) as a pipe table', () => {
+      const html = `<table>
+        <tr><th>Name</th><th>Value</th></tr>
+        <tr><td>foo</td><td>bar</td></tr>
+      </table>`
+      const result = htmlToMarkdown(html)
+      expect(result).toContain('| Name | Value |')
+      expect(result).toContain('| foo | bar |')
+      expect(result).toContain('---')
+    })
+
+    it('preserves inline formatting inside layout table cells', () => {
+      const html = `<table>
+        <tr><td><strong>Bold</strong> and <a href="/x">link</a></td></tr>
+      </table>`
+      const result = htmlToMarkdown(html)
+      expect(result).toContain('**Bold**')
+      expect(result).toContain('[link](/x)')
+    })
+
+    it('unwraps nested layout tables', () => {
+      const html = `<table>
+        <tr><td>
+          <table><tr><td>Inner</td></tr></table>
+        </td></tr>
+      </table>`
+      const result = htmlToMarkdown(html)
+      expect(result).not.toContain('|')
+      expect(result).toContain('Inner')
+    })
+
+    it('preserves a data table nested inside a layout table', () => {
+      const html = `<table>
+        <tr><td>
+          <table>
+            <tr><th>Col A</th><th>Col B</th></tr>
+            <tr><td>1</td><td>2</td></tr>
+          </table>
+        </td></tr>
+      </table>`
+      const result = htmlToMarkdown(html)
+      expect(result).toContain('| Col A | Col B |')
+    })
   })
 })
 
@@ -121,14 +232,35 @@ describe('convertPlainText', () => {
     expect(result).toBe('Hello\\\nWorld\n\n- item\n\nFoo\\\nBar')
   })
 
-  it('escapes < and > in prose', () => {
+  it('escapes < in prose (prevents HTML injection)', () => {
     const result = convertPlainText('See <https://example.com>')
-    expect(result).toBe('See &lt;https://example.com&gt;')
+    expect(result).toBe('See &lt;https://example.com>')
   })
 
-  it('escapes < and > in list items', () => {
+  it('escapes < in list items', () => {
     const result = convertPlainText('- See <note>')
-    expect(result).toBe('- See &lt;note&gt;')
+    expect(result).toBe('- See &lt;note>')
+  })
+
+  it('keeps > as-is so quoted lines become Markdown blockquotes', () => {
+    const text = '> Hello\n> World'
+    const result = convertPlainText(text)
+    expect(result).toContain('> Hello')
+    expect(result).toContain('> World')
+    expect(result).not.toContain('&gt;')
+  })
+
+  it('does not add hard-break \\ to blockquote lines', () => {
+    const text = '> Quoted line one\n> Quoted line two'
+    const result = convertPlainText(text)
+    expect(result).not.toContain('\\')
+  })
+
+  it('does not add hard-break \\ to prose line immediately before a blockquote', () => {
+    const text = 'Someone wrote:\n> Quoted text'
+    const result = convertPlainText(text)
+    expect(result).not.toMatch(/wrote:\\$/)
+    expect(result).toContain('> Quoted text')
   })
 
   it('preserves indented list items (spaces)', () => {
@@ -192,8 +324,8 @@ describe('convertPlainText', () => {
     expect(convertPlainText('####### not a heading')).toBe('####### not a heading')
   })
 
-  it('escapes # with up to 3 leading spaces', () => {
-    expect(convertPlainText('   # indented')).toBe('\\   # indented')
+  it('escapes # with up to 3 leading spaces, backslash right before #', () => {
+    expect(convertPlainText('   # indented')).toBe('   \\# indented')
   })
 })
 
