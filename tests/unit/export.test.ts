@@ -51,6 +51,13 @@ describe('preprocessHtml', () => {
     expect(result).not.toContain('​')
     expect(result).toContain('Text')
   })
+
+  it('strips combining grapheme joiner (U+034F) used in preheader padding', () => {
+    const html = '<p>Preview text͏͏͏͏͏</p><p>Body</p>'
+    const result = preprocessHtml(html)
+    expect(result).not.toContain('͏')
+    expect(result).toContain('Preview text')
+  })
 })
 
 // ── htmlToMarkdown ────────────────────────────────────────────────────────────
@@ -94,6 +101,14 @@ describe('htmlToMarkdown', () => {
     const result = htmlToMarkdown(html)
     expect(result).toContain('5')
     expect(result).toContain('3')
+  })
+
+  it('removes links with empty text (remnants of stripped images inside <a>)', () => {
+    const html = '<p>Before</p><a href="https://track.example.com/click"><img src="logo.png"></a><p>After</p>'
+    const result = htmlToMarkdown(html)
+    expect(result).not.toMatch(/\[\s*\]\(/)
+    expect(result).toContain('Before')
+    expect(result).toContain('After')
   })
 
   it('collapses 4+ consecutive blank lines to 2', () => {

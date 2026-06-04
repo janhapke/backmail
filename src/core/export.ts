@@ -34,8 +34,9 @@ export interface FolderExportResult {
 export function preprocessHtml(html: string): string {
   // Strip invisible filler characters used as spacers in HTML email
   // (soft hyphen U+00AD, zero-width space U+200B, zero-width non-joiner U+200C,
-  //  zero-width joiner U+200D, BOM/zero-width no-break space U+FEFF)
-  let out = html.replace(/[\u00ad\u200b\u200c\u200d\ufeff]/g, '')
+  //  zero-width joiner U+200D, BOM/zero-width no-break space U+FEFF,
+  //  combining grapheme joiner U+034F \u2014 used in preheader padding sequences)
+  let out = html.replace(/[\u034f\u00ad\u200b\u200c\u200d\ufeff]/g, '')
 
   // Strip <style> and <script> blocks
   out = out.replace(/<style[\s\S]*?<\/style>/gi, '')
@@ -157,6 +158,9 @@ export function htmlToMarkdown(html: string): string {
   md = md.replace(/[\u00a0\u1680\u2002\u2003\u2009\u200a\u202f]/g, ' ')
   // (b) Trim trailing whitespace from every line
   md = md.replace(/[ \t]+$/gm, '')
+  // (e) Remove links with empty or whitespace-only text \u2014 these come from <a> tags
+  //     that wrapped images or content we stripped (tracking links, logo anchors).
+  md = md.replace(/\[ *\]\([^)]*\)/g, '')
   // (d) Convert Turndown-escaped visual bullets (\* / \-) to real list items.
   //     Also strips leading whitespace so 4+-space indent doesn't trigger code blocks.
   md = md.replace(/^[ \t]*\\([*-]) /gm, '- ')
