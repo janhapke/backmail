@@ -30,25 +30,18 @@ describe('preprocessHtml', () => {
     expect(preprocessHtml(html)).toContain('<p>Text</p>')
   })
 
-  it('strips 1x1 tracking pixel img (width=1 height=1 attrs)', () => {
-    const html = '<img src="track.png" width="1" height="1"><p>Text</p>'
-    expect(preprocessHtml(html)).not.toContain('<img')
-    expect(preprocessHtml(html)).toContain('<p>Text</p>')
+  it('strips external images (logos, layout, tracking pixels)', () => {
+    const html = '<img src="https://example.com/logo.png"><img src="track.gif" width="1" height="1"><p>Text</p>'
+    const result = preprocessHtml(html)
+    expect(result).not.toContain('<img')
+    expect(result).toContain('<p>Text</p>')
   })
 
-  it('strips img with width=0 attribute', () => {
-    const html = '<img src="t.gif" width="0"><p>Text</p>'
-    expect(preprocessHtml(html)).not.toContain('<img')
-  })
-
-  it('strips img with style width:0', () => {
-    const html = '<img src="t.gif" style="width:0;height:0"><p>Text</p>'
-    expect(preprocessHtml(html)).not.toContain('<img')
-  })
-
-  it('preserves normal images', () => {
-    const html = '<img src="photo.jpg" width="800" height="600"><p>Text</p>'
-    expect(preprocessHtml(html)).toContain('<img')
+  it('preserves inline attachment images (cid: src)', () => {
+    const html = '<img src="cid:image001@example.com"><p>Text</p>'
+    const result = preprocessHtml(html)
+    expect(result).toContain('<img')
+    expect(result).toContain('cid:image001@example.com')
   })
 
   it('strips soft hyphens and zero-width spaces used as email spacers', () => {

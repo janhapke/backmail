@@ -41,22 +41,11 @@ export function preprocessHtml(html: string): string {
   out = out.replace(/<style[\s\S]*?<\/style>/gi, '')
   out = out.replace(/<script[\s\S]*?<\/script>/gi, '')
 
-  // Strip tracking-pixel <img> tags: width/height attr ≤ 1 or inline style width:0/height:0
+  // Strip all <img> tags except inline attachments (src="cid:...").
+  // Logos, layout images, and tracking pixels from external URLs are all removed.
   out = out.replace(/<img\b[^>]*>/gi, (tag) => {
-    // Check width/height attributes
-    const widthAttr = tag.match(/\bwidth\s*=\s*["']?(\d+)["']?/i)
-    const heightAttr = tag.match(/\bheight\s*=\s*["']?(\d+)["']?/i)
-    if (widthAttr && parseInt(widthAttr[1]) <= 1) return ''
-    if (heightAttr && parseInt(heightAttr[1]) <= 1) return ''
-
-    // Check inline style for width:0 or height:0
-    const styleAttr = tag.match(/\bstyle\s*=\s*["']([^"']*)["']/i)
-    if (styleAttr) {
-      const style = styleAttr[1]
-      if (/width\s*:\s*0/.test(style) || /height\s*:\s*0/.test(style)) return ''
-    }
-
-    return tag
+    const src = tag.match(/\bsrc\s*=\s*["']([^"']*)["']/i)
+    return src && src[1].toLowerCase().startsWith('cid:') ? tag : ''
   })
 
   return out
