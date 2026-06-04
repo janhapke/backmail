@@ -248,6 +248,50 @@ If a worktree for that reference already exists it is replaced.
 
 ---
 
+### `export`
+
+Export the archive as Markdown files — one `.md` per message — with YAML frontmatter and a human-readable body.
+
+```sh
+backmail export
+backmail export --only-folder INBOX --only-folder Sent
+backmail export --exclude-folder Spam --verbose
+```
+
+| Option | Description |
+|--------|-------------|
+| `--exclude-folder <name>` | Skip a folder (repeatable) |
+| `--only-folder <name>` | Restrict to a folder (repeatable) |
+| `--verbose` | Log one line per folder and per message |
+
+`--exclude-folder` and `--only-folder` are mutually exclusive.
+
+Output is written to `export/` next to `archive/`, mirroring the folder structure. Each file contains:
+
+- YAML frontmatter with `messageId`, `from`, `to`, `subject`, `receivedDate`, `folders`, and `attachments`
+- The subject as a top-level heading
+- HTML body converted to Markdown (layout tables unwrapped to prose, external images stripped, inline attachments preserved)
+- Plain text body appended after a triple horizontal-rule divider (when both parts are present)
+
+Running `export` again is idempotent — existing files are overwritten with identical content.
+
+Output:
+
+```
+export: =42 exported
+```
+
+If any message fails the export continues and the summary line is tagged `[partial]`:
+
+```
+export [partial]: =38 exported
+folder INBOX/Archive failed: read error
+```
+
+Exit code is non-zero when any folder fails.
+
+---
+
 ### `restore`
 
 Re-upload messages from a backup to an IMAP server. Useful for migrating to a new provider or recovering deleted mail.
@@ -290,6 +334,9 @@ archive/            # git repository
 worktrees/          # point-in-time checkouts (outside the git repo)
   2024-01-15/
   abc1234/
+export/             # Markdown export (created by `backmail export`)
+  INBOX/
+    2024-01-15_subject_aabbccdd.md
 ```
 
 Messages are content-addressed by Message-ID, so identical emails that appear in multiple IMAP folders (common with Gmail labels) are stored only once.
