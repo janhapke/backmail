@@ -347,6 +347,11 @@ export function assembleDocument(
 ): string {
   const frontmatter = buildFrontmatter(parsed, rawSource, folderPath)
 
+  const subject = parsed.subject ?? ''
+  const subjectHeading = subject.length > 0
+    ? subject + '\n' + '='.repeat(subject.length)
+    : ''
+
   // mailparser auto-generates text from html and vice versa — check the raw
   // content-type to determine which parts were explicitly present
   const unfolded = parseHeaderBlock(rawSource)
@@ -357,22 +362,24 @@ export function assembleDocument(
   const hasHtml = !isTopLevelTextOnly && typeof parsed.html === 'string' && parsed.html.length > 0
   const hasText = !isTopLevelHtmlOnly && typeof parsed.text === 'string' && parsed.text.length > 0
 
+  const header = subjectHeading ? frontmatter + '\n\n' + subjectHeading : frontmatter
+
   if (!hasHtml && !hasText) {
-    return frontmatter + '\n'
+    return header + '\n'
   }
 
   if (hasHtml && !hasText) {
-    return frontmatter + '\n\n' + htmlToMarkdown(parsed.html as string)
+    return header + '\n\n' + htmlToMarkdown(parsed.html as string)
   }
 
   if (!hasHtml && hasText) {
-    return frontmatter + '\n\n' + convertPlainText(parsed.text as string)
+    return header + '\n\n' + convertPlainText(parsed.text as string)
   }
 
   // Both HTML and plain text
   const divider = '\n\n---\n\n---\n\n---\n\n'
   return (
-    frontmatter +
+    header +
     '\n\n' +
     htmlToMarkdown(parsed.html as string) +
     divider +

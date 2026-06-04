@@ -487,6 +487,21 @@ describe('assembleDocument', () => {
     expect(doc).toContain('Plain text here')
   })
 
+  it('includes setext h1 with subject between frontmatter and body', async () => {
+    const eml = 'From: foo@example.com\r\nSubject: Hello World\r\n\r\nBody text'
+    const parsed = await simpleParser(Buffer.from(eml))
+    const doc = assembleDocument(parsed, Buffer.from(eml), 'INBOX')
+    expect(doc).toContain('Hello World\n===========')
+  })
+
+  it('omits heading when subject is empty', async () => {
+    const eml = 'From: foo@example.com\r\n\r\nBody text'
+    const parsed = await simpleParser(Buffer.from(eml))
+    const doc = assembleDocument(parsed, Buffer.from(eml), 'INBOX')
+    // No setext underline in output
+    expect(doc).not.toMatch(/^=+$/m)
+  })
+
   it('pure-attachment: only frontmatter, no body content', async () => {
     const boundary = 'att123'
     const eml = [
@@ -504,9 +519,12 @@ describe('assembleDocument', () => {
     ].join('\r\n')
     const parsed = await simpleParser(Buffer.from(eml))
     const doc = assembleDocument(parsed, Buffer.from(eml), 'INBOX')
-    // Should end with --- (closing frontmatter delimiter) and newline, nothing else
-    const afterFm = doc.replace(/^---[\s\S]*?---\n/, '')
-    expect(afterFm.trim()).toBe('')
+    // Only frontmatter + optional subject heading, no body content
+    expect(doc).not.toContain('AAAA')
+    expect(doc).not.toContain('text/plain')
+    // No prose body after the heading
+    const afterHeading = doc.replace(/^---[\s\S]*?---\n(\n[\s\S]*?={3,}\n)?/, '')
+    expect(afterHeading.trim()).toBe('')
   })
 })
 
