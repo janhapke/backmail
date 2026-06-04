@@ -1,4 +1,8 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import os from 'node:os'
+import path from 'node:path'
+import fs from 'node:fs'
+import fsp from 'node:fs/promises'
 import { simpleParser } from 'mailparser'
 import {
   preprocessHtml,
@@ -6,6 +10,8 @@ import {
   extractReceivedDate,
   buildFrontmatter,
   assembleDocument,
+  exportFolder,
+  exportAccount,
 } from '../../src/core/export.js'
 
 // ── preprocessHtml ────────────────────────────────────────────────────────────
@@ -240,5 +246,104 @@ describe('assembleDocument', () => {
     // Should end with --- (closing frontmatter delimiter) and newline, nothing else
     const afterFm = doc.replace(/^---[\s\S]*?---\n/, '')
     expect(afterFm.trim()).toBe('')
+  })
+})
+
+// ── exportFolder / exportAccount (I/O) ────────────────────────────────────────
+
+const SIMPLE_EML = 'From: foo@example.com\r\nSubject: Test\r\n\r\nHello world'
+
+function makeState(messages: { filename: string }[]) {
+  return JSON.stringify({
+    uidvalidity: '1',
+    uidnext: messages.length + 1,
+    messages: messages.map((m, i) => ({
+      uid: i + 1,
+      'message-id': `<${m.filename}@test>`,
+      filename: m.filename,
+      flags: [],
+    })),
+  })
+}
+
+describe('exportFolder', () => {
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backmail-export-'))
+  })
+
+  afterEach(async () => {
+    await fsp.rm(tmpDir, { recursive: true, force: true })
+  })
+
+  it('writes .md at correct path for a single message', async () => {
+    const archivePath = path.join(tmpDir, 'archive')
+    const exportPath = path.join(tmpDir, 'export')
+    const folderDir = path.join(archivePath, 'INBOX')
+    await fsp.mkdir(folderDir, { recursive: true })
+    await fsp.writeFile(path.join(folderDir, '.backmail_state.json'), makeState([{ filename: '2026-01-01_test_abc12345' }]))
+    await fsp.writeFile(path.join(folderDir, '2026-01-01_test_abc12345.eml'), SIMPLE_EML)
+
+    const result = await exportFolder(archivePath, exportPath, 'INBOX', {})
+    expect(result.exported).toBe(1)
+    expect(result.error).toBeUndefined()
+
+    const mdPath = path.join(exportPath, 'INBOX', '2026-01-01_test_abc12345.md')
+    const content = await fsp.readFile(mdPath, 'utf-8')
+    expect(content).toContain('messageId:')
+  })
+
+  it('counts error and continues when .eml is missing', async () => {
+    const archivePath = path.join(tmpDir, 'archive')
+    const exportPath = path.join(tmpDir, 'export')
+    const folderDir = path.join(archivePath, 'INBOX')
+    await fsp.mkdir(folderDir, { recursive: true })
+    await fsp.writeFile(
+      path.join(folderDir, '.backmail_state.json'),
+      makeState([{ filename: 'missing_file' }, { filename: '2026-01-01_ok_abc12345' }]),
+    )
+    // Only write the second eml
+    await fsp.writeFile(path.join(folderDir, '2026-01-01_ok_abc12345.eml'), SIMPLE_EML)
+
+    const logs: string[] = []
+    const result = await exportFolder(archivePath, exportPath, 'INBOX', { onLog: (m) => logs.push(m) })
+    expect(result.exported).toBe(1)
+    expect(logs.some((l) => l.includes('missing_file'))).toBe(true)
+  })
+})
+
+describe('exportAccount', () => {
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backmail-exportacc-'))
+  })
+
+  afterEach(async () => {
+    await fsp.rm(tmpDir, { recursive: true, force: true })
+  })
+
+  it('exports two folders and sums counts correctly', async () => {
+    const archivePath = path.join(tmpDir, 'archive')
+    const exportPath = path.join(tmpDir, 'export')
+
+    for (const folder of ['INBOX', 'Sent']) {
+      const folderDir = path.join(archivePath, folder)
+      await fsp.mkdir(folderDir, { recursive: true })
+      await fsp.writeFile(
+        path.join(folderDir, '.backmail_state.json'),
+        makeState([{ filename: `2026-01-01_msg_${folder.toLowerCase()}` }]),
+      )
+      await fsp.writeFile(
+        path.join(folderDir, `2026-01-01_msg_${folder.toLowerCase()}.eml`),
+        SIMPLE_EML,
+      )
+    }
+
+    const result = await exportAccount(archivePath, exportPath, {})
+    expect(result.exported).toBe(2)
+    expect(result.errors).toBe(0)
+    expect(result.folderResults).toHaveLength(2)
   })
 })

@@ -29,3 +29,7 @@ export { restoreAccount } from './restore.js'
 
 // Init
 export { initRepository } from './init.js'
+
+// Export
+export type { ExportOptions, ExportResult, FolderExportResult } from './export.js'
+export { exportAccount } from './export.js'
