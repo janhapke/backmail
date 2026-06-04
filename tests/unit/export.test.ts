@@ -10,6 +10,7 @@ import {
   extractReceivedDate,
   buildFrontmatter,
   assembleDocument,
+  convertPlainText,
   exportFolder,
   exportAccount,
 } from '../../src/core/export.js'
@@ -65,6 +66,134 @@ describe('htmlToMarkdown', () => {
     const html = '<p>A</p><p></p><p></p><p></p><p>B</p>'
     const result = htmlToMarkdown(html)
     expect(result).not.toMatch(/\n{4,}/)
+  })
+})
+
+// ── convertPlainText ──────────────────────────────────────────────────────────
+
+describe('convertPlainText', () => {
+  it('returns empty string for empty input', () => {
+    expect(convertPlainText('')).toBe('')
+  })
+
+  it('adds trailing \\ between consecutive prose lines', () => {
+    const result = convertPlainText('Line one\nLine two\nLine three')
+    expect(result).toBe('Line one\\\nLine two\\\nLine three')
+  })
+
+  it('does not add \\ after the last line', () => {
+    const result = convertPlainText('Only line')
+    expect(result).toBe('Only line')
+  })
+
+  it('does not add \\ before a blank line', () => {
+    const result = convertPlainText('Para one\n\nPara two')
+    expect(result).toBe('Para one\n\nPara two')
+  })
+
+  it('does not add \\ to list items (- )', () => {
+    const result = convertPlainText('- item one\n- item two')
+    expect(result).toBe('- item one\n- item two')
+  })
+
+  it('does not add \\ to list items (* )', () => {
+    const result = convertPlainText('* item one\n* item two')
+    expect(result).toBe('* item one\n* item two')
+  })
+
+  it('does not add \\ to numbered list items', () => {
+    const result = convertPlainText('1. first\n2. second')
+    expect(result).toBe('1. first\n2. second')
+  })
+
+  it('does not add \\ to prose line followed by a list item', () => {
+    const result = convertPlainText('Intro text\n- item one')
+    expect(result).toBe('Intro text\n- item one')
+  })
+
+  it('does not add \\ to list item followed by prose', () => {
+    const result = convertPlainText('- item\nTrailing prose')
+    expect(result).toBe('- item\nTrailing prose')
+  })
+
+  it('handles mixed prose and list', () => {
+    const result = convertPlainText('Hello\nWorld\n\n- item\n\nFoo\nBar')
+    expect(result).toBe('Hello\\\nWorld\n\n- item\n\nFoo\\\nBar')
+  })
+
+  it('escapes < and > in prose', () => {
+    const result = convertPlainText('See <https://example.com>')
+    expect(result).toBe('See &lt;https://example.com&gt;')
+  })
+
+  it('escapes < and > in list items', () => {
+    const result = convertPlainText('- See <note>')
+    expect(result).toBe('- See &lt;note&gt;')
+  })
+
+  it('preserves indented list items (spaces)', () => {
+    const result = convertPlainText('  - nested item')
+    expect(result).toBe('  - nested item')
+  })
+
+  it('turns a dash divider directly under text into a thematic break (not a heading)', () => {
+    const result = convertPlainText('Some text\n----------')
+    expect(result).toBe('Some text\n\n---')
+  })
+
+  it('turns an equals divider directly under text into a thematic break', () => {
+    const result = convertPlainText('Some text\n==========')
+    expect(result).toBe('Some text\n\n---')
+  })
+
+  it('turns a standalone dash divider into a thematic break without extra blank line', () => {
+    // Divider not preceded by non-empty line — no extra blank line needed
+    const result = convertPlainText('----------')
+    expect(result).toBe('---')
+  })
+
+  it('handles divider between two prose paragraphs', () => {
+    const result = convertPlainText('Para one\n----------\nPara two')
+    expect(result).toBe('Para one\n\n---\nPara two')
+  })
+
+  it('does not add \\ to prose line immediately before a divider', () => {
+    const result = convertPlainText('Line one\n----------')
+    // "Line one" should NOT get a trailing \ even though it is followed by non-empty content
+    expect(result).not.toContain('\\')
+  })
+
+  it('normalises both 2-char and long dividers to ---', () => {
+    expect(convertPlainText('--')).toBe('---')
+    expect(convertPlainText('==================================================================')).toBe('---')
+  })
+
+  it('escapes # heading (h1)', () => {
+    expect(convertPlainText('# Hello')).toBe('\\# Hello')
+  })
+
+  it('escapes ## heading (h2)', () => {
+    expect(convertPlainText('## Section')).toBe('\\## Section')
+  })
+
+  it('escapes up to h6', () => {
+    expect(convertPlainText('###### tiny')).toBe('\\###### tiny')
+  })
+
+  it('escapes # with no following space (bare hash at EOL counts as heading)', () => {
+    expect(convertPlainText('#')).toBe('\\#')
+  })
+
+  it('does not escape # in the middle of a line', () => {
+    expect(convertPlainText('color: #ff0000')).toBe('color: #ff0000')
+  })
+
+  it('does not escape lines with 7+ # chars (not a heading)', () => {
+    expect(convertPlainText('####### not a heading')).toBe('####### not a heading')
+  })
+
+  it('escapes # with up to 3 leading spaces', () => {
+    expect(convertPlainText('   # indented')).toBe('\\   # indented')
   })
 })
 

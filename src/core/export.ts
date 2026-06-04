@@ -68,6 +68,77 @@ export function htmlToMarkdown(html: string): string {
   return md.replace(/\n{3,}/g, '\n\n')
 }
 
+// ── Plain text → Markdown ─────────────────────────────────────────────────────
+
+// Matches manually typed list lines: optional leading spaces, then "- " or "* " or "N. "
+const MANUAL_LIST_RE = /^[ ]*(?:[-*][ \t]|\d+\.[ \t])/
+
+// Matches ASCII divider lines: 2+ dashes or equals signs (optional trailing spaces).
+// These are Setext heading underlines in CommonMark — when they appear directly under
+// a text line they would turn it into a heading. We normalise them to thematic breaks.
+const DIVIDER_RE = /^[-=]{2,}\s*$/
+
+function escapeHtml(s: string): string {
+  return s.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+interface ConvertedLine {
+  out: string
+  isBlock: boolean
+  isDivider: boolean
+}
+
+// Matches ATX heading lines: up to 3 leading spaces, then 1-6 # chars, then space/tab or EOL
+const ATX_HEADING_RE = /^[ ]{0,3}#{1,6}([ \t]|$)/
+
+function classifyLine(line: string): ConvertedLine {
+  if (line === '') return { out: '', isBlock: false, isDivider: false }
+  if (DIVIDER_RE.test(line)) return { out: '---', isBlock: false, isDivider: true }
+  if (MANUAL_LIST_RE.test(line)) return { out: escapeHtml(line), isBlock: true, isDivider: false }
+  // Escape leading # to prevent ATX heading interpretation
+  const escaped = ATX_HEADING_RE.test(line) ? '\\' + escapeHtml(line) : escapeHtml(line)
+  return { out: escaped, isBlock: false, isDivider: false }
+}
+
+export function convertPlainText(text: string): string {
+  if (text === '') return ''
+
+  const lines = text.split('\n').map(classifyLine)
+  const out: string[] = []
+
+  for (let i = 0; i < lines.length; i++) {
+    const curr = lines[i]
+    const next = lines[i + 1]
+
+    if (curr.isDivider) {
+      // Insert a blank line before the divider when the previous output line is
+      // non-empty, so the Markdown parser sees a thematic break rather than a
+      // Setext heading underline.
+      if (out.length > 0 && out[out.length - 1] !== '') out.push('')
+      out.push('---')
+      continue
+    }
+
+    if (curr.out === '') {
+      out.push('')
+      continue
+    }
+
+    // Append \ only between two consecutive non-empty prose lines.
+    // Skip if the next line is a divider (a blank line will be inserted before it).
+    const hardBreak =
+      !curr.isBlock &&
+      next !== undefined &&
+      !next.isDivider &&
+      next.out !== '' &&
+      !next.isBlock
+
+    out.push(hardBreak ? curr.out + '\\' : curr.out)
+  }
+
+  return out.join('\n')
+}
+
 // ── receivedDate extraction ───────────────────────────────────────────────────
 
 export function extractReceivedDate(rawSource: Buffer | string): string {
@@ -181,7 +252,7 @@ export function assembleDocument(
   }
 
   if (!hasHtml && hasText) {
-    return frontmatter + '\n\n' + (parsed.text as string)
+    return frontmatter + '\n\n' + convertPlainText(parsed.text as string)
   }
 
   // Both HTML and plain text
@@ -191,7 +262,7 @@ export function assembleDocument(
     '\n\n' +
     htmlToMarkdown(parsed.html as string) +
     divider +
-    (parsed.text as string)
+    convertPlainText(parsed.text as string)
   )
 }
 
