@@ -373,8 +373,7 @@ describe('buildFrontmatter', () => {
     const fm = buildFrontmatter(parsed, Buffer.from(eml), 'INBOX')
     expect(fm).toContain('messageId:')
     expect(fm).toContain('subject: "Hello World"')
-    expect(fm).toContain('name: "Jane Doe"')
-    expect(fm).toContain('email: "jane@example.com"')
+    expect(fm).toContain('from: "Jane Doe <jane@example.com>"')
     expect(fm).toContain('- "INBOX"')
   })
 
@@ -395,8 +394,8 @@ describe('buildFrontmatter', () => {
     ].join('\r\n')
     const parsed = await simpleParser(Buffer.from(eml))
     const fm = buildFrontmatter(parsed, Buffer.from(eml), 'INBOX')
-    expect(fm).toContain('email: "alice@example.com"')
-    expect(fm).toContain('email: "bob@example.com"')
+    expect(fm).toContain('"Alice <alice@example.com>"')
+    expect(fm).toContain('"Bob <bob@example.com>"')
   })
 
   it('sets subject to empty string when missing', async () => {
@@ -406,14 +405,14 @@ describe('buildFrontmatter', () => {
     expect(fm).toContain('subject: ""')
   })
 
-  it('sets from name to empty string when not present', async () => {
+  it('sets from to bare email when name is absent', async () => {
     const eml = 'From: foo@example.com\r\nSubject: Test\r\n\r\nBody'
     const parsed = await simpleParser(Buffer.from(eml))
     const fm = buildFrontmatter(parsed, Buffer.from(eml), 'INBOX')
-    expect(fm).toContain('name: ""')
+    expect(fm).toContain('from: "foo@example.com"')
   })
 
-  it('lists attachments with filename, contentType, size', async () => {
+  it('lists attachments as "filename (N bytes)" strings', async () => {
     const boundary = 'abc123boundary'
     const eml = [
       'From: foo@example.com',
@@ -434,9 +433,8 @@ describe('buildFrontmatter', () => {
     ].join('\r\n')
     const parsed = await simpleParser(Buffer.from(eml))
     const fm = buildFrontmatter(parsed, Buffer.from(eml), 'INBOX')
-    expect(fm).toContain('filename: "report.pdf"')
-    expect(fm).toContain('contentType: "application/pdf"')
-    expect(fm).toContain('size:')
+    expect(fm).toMatch(/- "report\.pdf \(\d+ bytes\)"/)
+    expect(fm).not.toContain('contentType:')
   })
 
   it('sets attachments: [] when no attachments', async () => {

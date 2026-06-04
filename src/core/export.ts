@@ -280,14 +280,21 @@ function yamlQuote(s: string): string {
   return '"' + s.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"'
 }
 
+function formatAddress(name: string | undefined, email: string | undefined): string {
+  const n = name?.trim() ?? ''
+  const e = email?.trim() ?? ''
+  if (n && e) return `${n} <${e}>`
+  return n || e
+}
+
 export function buildFrontmatter(
   parsed: ParsedMail,
   rawSource: Buffer | string,
   folderPath: string,
 ): string {
   const messageId = parsed.messageId ?? ''
-  const fromName = parsed.from?.value[0]?.name ?? ''
-  const fromEmail = parsed.from?.value[0]?.address ?? ''
+  const fromAddr = parsed.from?.value[0]
+  const fromStr = formatAddress(fromAddr?.name, fromAddr?.address)
   const toList = (parsed.to ? (Array.isArray(parsed.to) ? parsed.to : [parsed.to]) : [])
     .flatMap((a) => a.value)
   const subject = parsed.subject ?? ''
@@ -297,17 +304,14 @@ export function buildFrontmatter(
   const lines: string[] = []
   lines.push('---')
   lines.push(`messageId: ${yamlQuote(messageId)}`)
-  lines.push('from:')
-  lines.push(`  name: ${yamlQuote(fromName)}`)
-  lines.push(`  email: ${yamlQuote(fromEmail)}`)
+  lines.push(`from: ${yamlQuote(fromStr)}`)
 
   if (toList.length === 0) {
     lines.push('to: []')
   } else {
     lines.push('to:')
     for (const addr of toList) {
-      lines.push(`  - name: ${yamlQuote(addr.name ?? '')}`)
-      lines.push(`    email: ${yamlQuote(addr.address ?? '')}`)
+      lines.push(`  - ${yamlQuote(formatAddress(addr.name, addr.address))}`)
     }
   }
 
@@ -321,9 +325,9 @@ export function buildFrontmatter(
   } else {
     lines.push('attachments:')
     for (const att of attachments) {
-      lines.push(`  - filename: ${yamlQuote(att.filename ?? '')}`)
-      lines.push(`    contentType: ${yamlQuote(att.contentType)}`)
-      lines.push(`    size: ${att.size ?? 0}`)
+      const name = att.filename ?? ''
+      const size = att.size ?? 0
+      lines.push(`  - ${yamlQuote(name ? `${name} (${size} bytes)` : `(${size} bytes)`)}`)
     }
   }
 
