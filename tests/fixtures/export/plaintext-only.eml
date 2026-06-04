@@ -1,0 +1,9 @@
+From: sender@example.com
+To: recipient@example.com
+Subject: Plain Text Only Email
+Date: Thu, 15 Jan 2026 14:00:00 +0000
+Message-ID: <plaintext-only@example.com>
+Content-Type: text/plain; charset=UTF-8
+
+Hello, this is a plain-text-only email.
+No HTML part here.

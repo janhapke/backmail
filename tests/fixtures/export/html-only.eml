@@ -1,0 +1,9 @@
+From: sender@example.com
+To: recipient@example.com
+Subject: HTML Only Email
+Date: Thu, 15 Jan 2026 13:37:42 +0000
+Message-ID: <html-only@example.com>
+Content-Type: text/html; charset=UTF-8
+
+<p><strong>Hello</strong>, this is an HTML-only email.</p>
+<p>No plain text part.</p>

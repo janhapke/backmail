@@ -1,0 +1,18 @@
+From: sender@example.com
+To: recipient@example.com
+Subject: Multipart Email
+Date: Thu, 15 Jan 2026 15:00:00 +0000
+Message-ID: <multipart@example.com>
+Content-Type: multipart/alternative; boundary="mp-boundary-123"
+
+--mp-boundary-123
+Content-Type: text/plain; charset=UTF-8
+
+Hello, this is the plain text part.
+
+--mp-boundary-123
+Content-Type: text/html; charset=UTF-8
+
+<p>Hello, this is the <strong>HTML part</strong>.</p>
+
+--mp-boundary-123--
