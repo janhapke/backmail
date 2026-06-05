@@ -1,0 +1,8 @@
+From: sender@example.com
+To: Alice <alice@example.com>, Bob <bob@example.com>, Carol <carol@example.com>
+Subject: Multi-Recipient Email
+Date: Thu, 15 Jan 2026 17:00:00 +0000
+Message-ID: <multi-recipient@example.com>
+Content-Type: text/plain; charset=UTF-8
+
+Hello everyone, this email has three recipients.

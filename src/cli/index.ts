@@ -39,7 +39,7 @@ function getRepoRoot(): string {
   return repoRoot
 }
 
-import { syncAccount, getLog, checkoutCommit, listFolders, listMessages, viewMessage, restoreAccount } from '../core/index.js'
+import { syncAccount, getLog, checkoutCommit, listFolders, listMessages, viewMessage, restoreAccount, exportAccount } from '../core/index.js'
 
 function getErrorMessage(err: unknown): string {
   if (err instanceof Error) {
@@ -367,6 +367,50 @@ program
     try {
       await initRepository(targetDir, config, passwordRef)
       console.log(`Initialized backmail repository at ${targetDir}`)
+    } catch (err) {
+      console.error(getErrorMessage(err))
+      process.exit(1)
+    }
+  })
+
+// ── export ───────────────────────────────────────────────────────────────────
+program
+  .command('export')
+  .description('Export archive messages as Markdown files')
+  .option('--exclude-folder <name>', 'skip this folder (repeatable)', collectRepeatable, [])
+  .option('--only-folder <name>', 'restrict to this folder (repeatable)', collectRepeatable, [])
+  .option('--verbose', 'log one line per exported file')
+  .action(async (opts: { excludeFolder: string[]; onlyFolder: string[]; verbose?: boolean }) => {
+    if (opts.excludeFolder.length > 0 && opts.onlyFolder.length > 0) {
+      console.error('Error: --exclude-folder and --only-folder are mutually exclusive')
+      process.exit(1)
+    }
+
+    try {
+      const repoRoot = getRepoRoot()
+      const archivePath = path.join(repoRoot, 'archive')
+      const exportPath = path.join(repoRoot, 'export')
+      const verbose = opts.verbose ?? false
+
+      const result = await exportAccount(archivePath, exportPath, {
+        excludeFolders: opts.excludeFolder,
+        onlyFolders: opts.onlyFolder,
+        verbose,
+        onLog: verbose ? (msg) => console.log(msg) : undefined,
+      })
+
+      const partialTag = result.errors > 0 ? ' [partial]' : ''
+      console.log(`export${partialTag}: =${result.exported} exported`)
+
+      for (const fr of result.folderResults) {
+        if (fr.error) {
+          console.error(`folder ${fr.path} failed: ${fr.error.message}`)
+        }
+      }
+
+      if (result.errors > 0) {
+        process.exit(1)
+      }
     } catch (err) {
       console.error(getErrorMessage(err))
       process.exit(1)

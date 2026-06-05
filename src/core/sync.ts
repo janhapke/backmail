@@ -113,13 +113,13 @@ export function decodeMimeWords(value: string): string {
 }
 
 // Extract the first occurrence of a named header from the raw (unfolded) header block.
-function extractRawHeader(unfolded: string, name: string): string {
+export function extractRawHeader(unfolded: string, name: string): string {
   const re = new RegExp(`^${name}:[ \\t]*(.*)$`, 'im')
   return unfolded.match(re)?.[1]?.trim() ?? ''
 }
 
 // Unfold and extract just the header section from raw email bytes.
-function parseHeaderBlock(rawSource: Buffer | string): string {
+export function parseHeaderBlock(rawSource: Buffer | string): string {
   const text = typeof rawSource === 'string'
     ? rawSource.slice(0, 65536)
     : rawSource.subarray(0, 65536).toString('utf-8')
