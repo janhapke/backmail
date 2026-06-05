@@ -210,6 +210,42 @@ describe('htmlToMarkdown', () => {
       const result = htmlToMarkdown(html)
       expect(result).toContain('| Col A | Col B |')
     })
+
+    it('adds hard line breaks between layout table cell lines so they render visibly', () => {
+      // Each cell ends up on its own line after table unwrapping; without \
+      // they would render as a single run-on paragraph in markdown.
+      const html = `<table>
+        <tr><td>First cell</td><td>Second cell</td></tr>
+        <tr><td>Third cell</td><td>Fourth cell</td></tr>
+      </table>`
+      const result = htmlToMarkdown(html)
+      // All prose lines except the last in a consecutive run should end with \
+      const lines = result.split('\n').filter((l) => l.trim() !== '')
+      for (let i = 0; i < lines.length - 1; i++) {
+        expect(lines[i]).toMatch(/\\$/)
+      }
+      expect(lines[lines.length - 1]).not.toMatch(/\\$/)
+    })
+
+    it('does not add hard breaks to lines already separated by blank lines', () => {
+      // Regular paragraphs are separated by \n\n and must NOT get \
+      const html = '<p>Paragraph one</p><p>Paragraph two</p>'
+      const result = htmlToMarkdown(html)
+      expect(result).not.toContain('\\')
+    })
+
+    it('does not add hard breaks to heading or list lines from layout tables', () => {
+      // When a layout table cell contains a heading or list, those lines are
+      // block elements and should not receive or trigger hard-break markers.
+      const html = `<table>
+        <tr><td><h2>Section title</h2></td></tr>
+        <tr><td><ul><li>item one</li><li>item two</li></ul></td></tr>
+      </table>`
+      const result = htmlToMarkdown(html)
+      // No line ending with \ should appear
+      expect(result).not.toMatch(/\\\n/)
+      expect(result).not.toMatch(/\\$/)
+    })
   })
 })
 

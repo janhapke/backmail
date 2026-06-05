@@ -193,8 +193,40 @@ export function htmlToMarkdown(html: string): string {
   md = md.replace(/^[ \t]*\\([*-]) /gm, '- ')
   // (c) Collapse 3+ consecutive newlines to 2
   md = md.replace(/\n{3,}/g, '\n\n')
+  // (f) Add hard line breaks between consecutive non-block prose lines so that
+  //     content extracted from layout tables (collapsed to single newlines) still
+  //     renders with visible line breaks in markdown.
+  md = addMarkdownHardBreaks(md)
 
   return md
+}
+
+// ── Markdown hard-break pass ──────────────────────────────────────────────────
+// Detects markdown structural lines that should not receive or trigger a hard-
+// break marker: headings, blockquotes, list items, indented/fenced code,
+// thematic breaks, setext underlines, and GFM table rows.
+const MD_BLOCK_RE =
+  /^(?:[ ]{0,3}#{1,6}[ \t]|>|[ ]{0,3}[-*+][ \t]|[ ]{0,3}\d+\.[ \t]|[ ]{4,}|\t|`{3,}|~{3,}|[=\-*_]{3,}\s*$|\|)/
+
+function addMarkdownHardBreaks(md: string): string {
+  const lines = md.split('\n')
+  const out: string[] = []
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const next = lines[i + 1]
+    const isEmpty = (s: string | undefined): boolean =>
+      s === undefined || s === '' || /^\s+$/.test(s)
+    const isBlock = (s: string): boolean => MD_BLOCK_RE.test(s)
+
+    const addBreak =
+      !isEmpty(line) &&
+      !isBlock(line) &&
+      !isEmpty(next) &&
+      !isBlock(next)
+
+    out.push(addBreak ? line + '\\' : line)
+  }
+  return out.join('\n')
 }
 
 // ── Plain text → Markdown ─────────────────────────────────────────────────────
