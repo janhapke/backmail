@@ -559,7 +559,6 @@ export async function exportFolder(
           const [emlStat, mdStat] = await Promise.all([fs.stat(emlPath), fs.stat(mdPath)])
           if (mdStat.mtimeMs >= emlStat.mtimeMs) {
             result.skipped++
-            if (opts.verbose) opts.onLog?.(`skipped ${folderPath}/${msg.filename}.md (up to date)`)
             continue
           }
         } catch {
