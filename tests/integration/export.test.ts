@@ -101,25 +101,18 @@ describe('exportAccount integration', () => {
     expect(mdCount).toBe(emlCount)
   })
 
-  it('is idempotent: running twice produces identical output', async () => {
-    // Read current content
-    const readAll = async () => {
-      const contents: Record<string, string> = {}
-      for (const folder of ['FolderA', 'FolderB']) {
-        const dir = path.join(exportPath, folder)
-        const entries = await fs.readdir(dir)
-        for (const f of entries.filter((e) => e.endsWith('.md'))) {
-          contents[`${folder}/${f}`] = await fs.readFile(path.join(dir, f), 'utf-8')
-        }
-      }
-      return contents
-    }
+  it('incremental: second run skips all up-to-date files', async () => {
+    const total = FOLDER_A_FILES.length + FOLDER_B_FILES.length
+    const result = await exportAccount(archivePath, exportPath, {})
+    expect(result.exported).toBe(0)
+    expect(result.skipped).toBe(total)
+  })
 
-    const before = await readAll()
-    await exportAccount(archivePath, exportPath, {})
-    const after = await readAll()
-
-    expect(after).toEqual(before)
+  it('--force: re-exports all files even when up to date', async () => {
+    const total = FOLDER_A_FILES.length + FOLDER_B_FILES.length
+    const result = await exportAccount(archivePath, exportPath, { force: true })
+    expect(result.exported).toBe(total)
+    expect(result.skipped).toBe(0)
   })
 
   it('--only-folder: only specified folder is in output', async () => {

@@ -14,11 +14,13 @@ export interface ExportOptions {
   excludeFolders?: string[]
   onlyFolders?: string[]
   verbose?: boolean
+  force?: boolean
   onLog?: (msg: string) => void
 }
 
 export interface ExportResult {
   exported: number
+  skipped: number
   errors: number
   folderResults: FolderExportResult[]
 }
@@ -26,6 +28,7 @@ export interface ExportResult {
 export interface FolderExportResult {
   path: string
   exported: number
+  skipped: number
   error?: Error
 }
 
@@ -510,9 +513,9 @@ export async function exportFolder(
   archivePath: string,
   exportPath: string,
   folderPath: string,
-  opts: { verbose?: boolean; onLog?: (m: string) => void },
+  opts: { verbose?: boolean; force?: boolean; onLog?: (m: string) => void },
 ): Promise<FolderExportResult> {
-  const result: FolderExportResult = { path: folderPath, exported: 0 }
+  const result: FolderExportResult = { path: folderPath, exported: 0, skipped: 0 }
 
   const stateFilePath = path.join(archivePath, folderPath, '.backmail_state.json')
   let state: FolderState
@@ -529,18 +532,31 @@ export async function exportFolder(
 
   for (const msg of state.messages) {
     const emlPath = path.join(archivePath, folderPath, `${msg.filename}.eml`)
+    const mdPath = path.join(outDir, `${msg.filename}.md`)
     try {
+      if (!opts.force) {
+        // Skip if the .md already exists and is at least as new as the .eml
+        try {
+          const [emlStat, mdStat] = await Promise.all([fs.stat(emlPath), fs.stat(mdPath)])
+          if (mdStat.mtimeMs >= emlStat.mtimeMs) {
+            result.skipped++
+            if (opts.verbose) opts.onLog?.(`skipped ${folderPath}/${msg.filename}.md (up to date)`)
+            continue
+          }
+        } catch {
+          // .md doesn't exist or .eml missing — fall through to export
+        }
+      }
+
       const rawSource = await fs.readFile(emlPath)
       const parsed = await simpleParser(rawSource)
       const mdContent = assembleDocument(parsed, rawSource, folderPath)
-      const mdPath = path.join(outDir, `${msg.filename}.md`)
       await fs.writeFile(mdPath, mdContent, 'utf-8')
       result.exported++
       if (opts.verbose) opts.onLog?.(`exported ${folderPath}/${msg.filename}.md`)
     } catch (err) {
       const msg2 = err instanceof Error ? err.message : String(err)
       opts.onLog?.(`error exporting ${folderPath}/${msg.filename}.eml: ${msg2}`)
-      result.exported  // don't increment
     }
   }
 
@@ -559,17 +575,20 @@ export async function exportAccount(
 
   const folderResults: FolderExportResult[] = []
   let totalExported = 0
+  let totalSkipped = 0
   let totalErrors = 0
 
   for (const folder of folders) {
     const fr = await exportFolder(archivePath, exportPath, folder, {
       verbose: opts.verbose,
+      force: opts.force,
       onLog: opts.onLog,
     })
     folderResults.push(fr)
     totalExported += fr.exported
+    totalSkipped += fr.skipped
     if (fr.error) totalErrors++
   }
 
-  return { exported: totalExported, errors: totalErrors, folderResults }
+  return { exported: totalExported, skipped: totalSkipped, errors: totalErrors, folderResults }
 }

@@ -671,6 +671,7 @@ describe('exportFolder', () => {
 
     const result = await exportFolder(archivePath, exportPath, 'INBOX', {})
     expect(result.exported).toBe(1)
+    expect(result.skipped).toBe(0)
     expect(result.error).toBeUndefined()
 
     const mdPath = path.join(exportPath, 'INBOX', '2026-01-01_test_abc12345.md')
@@ -694,6 +695,75 @@ describe('exportFolder', () => {
     const result = await exportFolder(archivePath, exportPath, 'INBOX', { onLog: (m) => logs.push(m) })
     expect(result.exported).toBe(1)
     expect(logs.some((l) => l.includes('missing_file'))).toBe(true)
+  })
+
+  it('skips .md that is newer than .eml (incremental)', async () => {
+    const archivePath = path.join(tmpDir, 'archive')
+    const exportPath = path.join(tmpDir, 'export')
+    const folderDir = path.join(archivePath, 'INBOX')
+    const outDir = path.join(exportPath, 'INBOX')
+    await fsp.mkdir(folderDir, { recursive: true })
+    await fsp.mkdir(outDir, { recursive: true })
+    await fsp.writeFile(path.join(folderDir, '.backmail_state.json'), makeState([{ filename: '2026-01-01_test_abc12345' }]))
+
+    // Write the .eml with a past mtime, then write a .md with a future mtime
+    const emlPath = path.join(folderDir, '2026-01-01_test_abc12345.eml')
+    const mdPath = path.join(outDir, '2026-01-01_test_abc12345.md')
+    await fsp.writeFile(emlPath, SIMPLE_EML)
+    const past = new Date(Date.now() - 10000)
+    await fsp.utimes(emlPath, past, past)
+    await fsp.writeFile(mdPath, 'existing content')
+
+    const result = await exportFolder(archivePath, exportPath, 'INBOX', {})
+    expect(result.exported).toBe(0)
+    expect(result.skipped).toBe(1)
+    // Existing .md content must be unchanged
+    expect(await fsp.readFile(mdPath, 'utf-8')).toBe('existing content')
+  })
+
+  it('re-exports when .eml is newer than .md (incremental)', async () => {
+    const archivePath = path.join(tmpDir, 'archive')
+    const exportPath = path.join(tmpDir, 'export')
+    const folderDir = path.join(archivePath, 'INBOX')
+    const outDir = path.join(exportPath, 'INBOX')
+    await fsp.mkdir(folderDir, { recursive: true })
+    await fsp.mkdir(outDir, { recursive: true })
+    await fsp.writeFile(path.join(folderDir, '.backmail_state.json'), makeState([{ filename: '2026-01-01_test_abc12345' }]))
+
+    // Write a .md with a past mtime, then write the .eml with a newer mtime
+    const emlPath = path.join(folderDir, '2026-01-01_test_abc12345.eml')
+    const mdPath = path.join(outDir, '2026-01-01_test_abc12345.md')
+    await fsp.writeFile(mdPath, 'stale content')
+    const past = new Date(Date.now() - 10000)
+    await fsp.utimes(mdPath, past, past)
+    await fsp.writeFile(emlPath, SIMPLE_EML)
+
+    const result = await exportFolder(archivePath, exportPath, 'INBOX', {})
+    expect(result.exported).toBe(1)
+    expect(result.skipped).toBe(0)
+    expect(await fsp.readFile(mdPath, 'utf-8')).not.toBe('stale content')
+  })
+
+  it('force flag re-exports even when .md is up to date', async () => {
+    const archivePath = path.join(tmpDir, 'archive')
+    const exportPath = path.join(tmpDir, 'export')
+    const folderDir = path.join(archivePath, 'INBOX')
+    const outDir = path.join(exportPath, 'INBOX')
+    await fsp.mkdir(folderDir, { recursive: true })
+    await fsp.mkdir(outDir, { recursive: true })
+    await fsp.writeFile(path.join(folderDir, '.backmail_state.json'), makeState([{ filename: '2026-01-01_test_abc12345' }]))
+
+    const emlPath = path.join(folderDir, '2026-01-01_test_abc12345.eml')
+    const mdPath = path.join(outDir, '2026-01-01_test_abc12345.md')
+    await fsp.writeFile(emlPath, SIMPLE_EML)
+    const past = new Date(Date.now() - 10000)
+    await fsp.utimes(emlPath, past, past)
+    await fsp.writeFile(mdPath, 'existing content')
+
+    const result = await exportFolder(archivePath, exportPath, 'INBOX', { force: true })
+    expect(result.exported).toBe(1)
+    expect(result.skipped).toBe(0)
+    expect(await fsp.readFile(mdPath, 'utf-8')).not.toBe('existing content')
   })
 })
 
@@ -727,6 +797,7 @@ describe('exportAccount', () => {
 
     const result = await exportAccount(archivePath, exportPath, {})
     expect(result.exported).toBe(2)
+    expect(result.skipped).toBe(0)
     expect(result.errors).toBe(0)
     expect(result.folderResults).toHaveLength(2)
   })

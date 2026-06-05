@@ -264,7 +264,8 @@ backmail export --exclude-folder Spam --verbose
 |--------|-------------|
 | `--exclude-folder <name>` | Skip a folder (repeatable) |
 | `--only-folder <name>` | Restrict to a folder (repeatable) |
-| `--verbose` | Log one line per folder and per message |
+| `--verbose` | Log one line per exported file |
+| `--force` | Re-export all messages and overwrite existing files |
 
 `--exclude-folder` and `--only-folder` are mutually exclusive.
 
@@ -275,18 +276,18 @@ Output is written to `export/` next to `archive/`, mirroring the folder structur
 - Plain text body (when present)
 - HTML body converted to Markdown, preceded by a labelled separator block (when both parts are present — layout tables are unwrapped to prose, external images stripped, inline attachments preserved)
 
-Running `export` again is idempotent — existing files are overwritten with identical content.
+By default `export` is incremental — a `.md` file is skipped if it is already newer than its source `.eml`. Use `--force` to re-export everything regardless.
 
 Output:
 
 ```
-export: =42 exported
+export: 42 exported / 1204 skipped
 ```
 
 If any message fails the export continues and the summary line is tagged `[partial]`:
 
 ```
-export [partial]: =38 exported
+export [partial]: 38 exported / 0 skipped
 folder INBOX/Archive failed: read error
 ```
 

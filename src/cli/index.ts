@@ -380,7 +380,8 @@ program
   .option('--exclude-folder <name>', 'skip this folder (repeatable)', collectRepeatable, [])
   .option('--only-folder <name>', 'restrict to this folder (repeatable)', collectRepeatable, [])
   .option('--verbose', 'log one line per exported file')
-  .action(async (opts: { excludeFolder: string[]; onlyFolder: string[]; verbose?: boolean }) => {
+  .option('--force', 're-export all messages and overwrite existing files')
+  .action(async (opts: { excludeFolder: string[]; onlyFolder: string[]; verbose?: boolean; force?: boolean }) => {
     if (opts.excludeFolder.length > 0 && opts.onlyFolder.length > 0) {
       console.error('Error: --exclude-folder and --only-folder are mutually exclusive')
       process.exit(1)
@@ -396,11 +397,12 @@ program
         excludeFolders: opts.excludeFolder,
         onlyFolders: opts.onlyFolder,
         verbose,
+        force: opts.force ?? false,
         onLog: verbose ? (msg) => console.log(msg) : undefined,
       })
 
       const partialTag = result.errors > 0 ? ' [partial]' : ''
-      console.log(`export${partialTag}: =${result.exported} exported`)
+      console.log(`export${partialTag}: ${result.exported} exported / ${result.skipped} skipped`)
 
       for (const fr of result.folderResults) {
         if (fr.error) {
