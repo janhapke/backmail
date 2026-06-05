@@ -160,6 +160,8 @@ backmail sync --exclude-folder Spam --verbose
 | `--exclude-folder <name>` | Skip a folder (repeatable) |
 | `--only-folder <name>` | Restrict to a folder (repeatable) |
 | `--verbose` | Log one line per folder and per message |
+| `--force` | Re-download all messages and overwrite local copies |
+| `--reindex` | Rename existing `.eml` files to match current filename logic without contacting IMAP |
 
 `--exclude-folder` and `--only-folder` are mutually exclusive.
 
