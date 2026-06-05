@@ -11,7 +11,7 @@ export { findRepository } from './discovery.js'
 
 // Sync
 export type { SyncResult, SyncOptions, FolderSyncResult } from './sync.js'
-export { syncAccount, reindexLocalFolders, decodeMimeWords } from './sync.js'
+export { syncAccount, reindexLocalFolders, decodeMimeWords, parseHeaderBlock, extractRawHeader } from './sync.js'
 
 // Browse
 export type { MessageSummary } from './browse.js'
@@ -29,3 +29,7 @@ export { restoreAccount } from './restore.js'
 
 // Init
 export { initRepository } from './init.js'
+
+// Export
+export type { ExportOptions, ExportResult, FolderExportResult } from './export.js'
+export { exportAccount } from './export.js'
