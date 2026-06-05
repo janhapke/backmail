@@ -447,7 +447,7 @@ describe('buildFrontmatter', () => {
       'Body text',
     ].join('\r\n')
     const parsed = await simpleParser(Buffer.from(eml))
-    const fm = buildFrontmatter(parsed, Buffer.from(eml), 'INBOX')
+    const fm = buildFrontmatter(parsed, Buffer.from(eml), 'INBOX', [])
     expect(fm).toContain('messageId:')
     expect(fm).toContain('subject: "Hello World"')
     expect(fm).toContain('from: "Jane Doe <jane@example.com>"')
@@ -457,7 +457,7 @@ describe('buildFrontmatter', () => {
   it('produces to: [] when To header is absent', async () => {
     const eml = 'From: foo@example.com\r\nSubject: Test\r\n\r\nBody'
     const parsed = await simpleParser(Buffer.from(eml))
-    const fm = buildFrontmatter(parsed, Buffer.from(eml), 'INBOX')
+    const fm = buildFrontmatter(parsed, Buffer.from(eml), 'INBOX', [])
     expect(fm).toContain('to: []')
   })
 
@@ -470,7 +470,7 @@ describe('buildFrontmatter', () => {
       'Body',
     ].join('\r\n')
     const parsed = await simpleParser(Buffer.from(eml))
-    const fm = buildFrontmatter(parsed, Buffer.from(eml), 'INBOX')
+    const fm = buildFrontmatter(parsed, Buffer.from(eml), 'INBOX', [])
     expect(fm).toContain('"Alice <alice@example.com>"')
     expect(fm).toContain('"Bob <bob@example.com>"')
   })
@@ -478,14 +478,14 @@ describe('buildFrontmatter', () => {
   it('sets subject to empty string when missing', async () => {
     const eml = 'From: foo@example.com\r\n\r\nBody'
     const parsed = await simpleParser(Buffer.from(eml))
-    const fm = buildFrontmatter(parsed, Buffer.from(eml), 'INBOX')
+    const fm = buildFrontmatter(parsed, Buffer.from(eml), 'INBOX', [])
     expect(fm).toContain('subject: ""')
   })
 
   it('sets from to bare email when name is absent', async () => {
     const eml = 'From: foo@example.com\r\nSubject: Test\r\n\r\nBody'
     const parsed = await simpleParser(Buffer.from(eml))
-    const fm = buildFrontmatter(parsed, Buffer.from(eml), 'INBOX')
+    const fm = buildFrontmatter(parsed, Buffer.from(eml), 'INBOX', [])
     expect(fm).toContain('from: "foo@example.com"')
   })
 
@@ -509,7 +509,7 @@ describe('buildFrontmatter', () => {
       `--${boundary}--`,
     ].join('\r\n')
     const parsed = await simpleParser(Buffer.from(eml))
-    const fm = buildFrontmatter(parsed, Buffer.from(eml), 'INBOX')
+    const fm = buildFrontmatter(parsed, Buffer.from(eml), 'INBOX', [])
     expect(fm).toMatch(/- "report\.pdf \(\d+ bytes\)"/)
     expect(fm).not.toContain('contentType:')
   })
@@ -517,8 +517,24 @@ describe('buildFrontmatter', () => {
   it('sets attachments: [] when no attachments', async () => {
     const eml = 'From: foo@example.com\r\nSubject: Test\r\n\r\nBody'
     const parsed = await simpleParser(Buffer.from(eml))
-    const fm = buildFrontmatter(parsed, Buffer.from(eml), 'INBOX')
+    const fm = buildFrontmatter(parsed, Buffer.from(eml), 'INBOX', [])
     expect(fm).toContain('attachments: []')
+  })
+
+  it('includes formats list in frontmatter', async () => {
+    const eml = 'From: foo@example.com\r\nSubject: Test\r\n\r\nBody'
+    const parsed = await simpleParser(Buffer.from(eml))
+    const fm = buildFrontmatter(parsed, Buffer.from(eml), 'INBOX', ['plaintext', 'html'])
+    expect(fm).toContain('formats:')
+    expect(fm).toContain('  - "plaintext"')
+    expect(fm).toContain('  - "html"')
+  })
+
+  it('includes formats: [] when no formats given', async () => {
+    const eml = 'From: foo@example.com\r\nSubject: Test\r\n\r\nBody'
+    const parsed = await simpleParser(Buffer.from(eml))
+    const fm = buildFrontmatter(parsed, Buffer.from(eml), 'INBOX', [])
+    expect(fm).toContain('formats: []')
   })
 })
 
@@ -536,7 +552,7 @@ describe('assembleDocument', () => {
     const parsed = await simpleParser(Buffer.from(eml))
     const doc = assembleDocument(parsed, Buffer.from(eml), 'INBOX')
     expect(doc).toContain('**Hello**')
-    expect(doc).not.toContain('\n\n---\n\n---\n\n---\n\n')
+    expect(doc).not.toContain('html-body below')
   })
 
   it('plain-text-only: body is plain text, no conversion', async () => {
@@ -546,7 +562,7 @@ describe('assembleDocument', () => {
     expect(doc).toContain('Hello plain world')
   })
 
-  it('HTML + plain text: three-divider block present', async () => {
+  it('HTML + plain text: separator present, plain text before HTML', async () => {
     const boundary = 'div123'
     const eml = [
       'From: foo@example.com',
@@ -565,9 +581,15 @@ describe('assembleDocument', () => {
     ].join('\r\n')
     const parsed = await simpleParser(Buffer.from(eml))
     const doc = assembleDocument(parsed, Buffer.from(eml), 'INBOX')
-    expect(doc).toContain('\n\n---\n\n---\n\n---\n\n')
+    expect(doc).toContain('**[html-body below - automatically converted from HTML; may contain formatting loss or artifacts]**')
     expect(doc).toContain('HTML here')
     expect(doc).toContain('Plain text here')
+    // Plain text section must come before the HTML section
+    expect(doc.indexOf('Plain text here')).toBeLessThan(doc.indexOf('HTML here'))
+    // Frontmatter must list both formats
+    expect(doc).toContain('formats:')
+    expect(doc).toContain('"plaintext"')
+    expect(doc).toContain('"html"')
   })
 
   it('includes setext h1 with subject between frontmatter and body', async () => {

@@ -352,6 +352,7 @@ export function buildFrontmatter(
   parsed: ParsedMail,
   rawSource: Buffer | string,
   folderPath: string,
+  formats: string[],
 ): string {
   const messageId = parsed.messageId ?? ''
   const fromAddr = parsed.from?.value[0]
@@ -377,9 +378,18 @@ export function buildFrontmatter(
   }
 
   lines.push(`subject: ${yamlQuote(subject)}`)
-  lines.push(`receivedDate: ${yamlQuote(receivedDate)}`)
+  lines.push(`received: ${yamlQuote(receivedDate)}`)
   lines.push('folders:')
   lines.push(`  - ${yamlQuote(folderPath)}`)
+
+  if (formats.length === 0) {
+    lines.push('formats: []')
+  } else {
+    lines.push('formats:')
+    for (const fmt of formats) {
+      lines.push(`  - ${yamlQuote(fmt)}`)
+    }
+  }
 
   if (attachments.length === 0) {
     lines.push('attachments: []')
@@ -398,18 +408,19 @@ export function buildFrontmatter(
 
 // ── Document assembler ────────────────────────────────────────────────────────
 
+// Separator used when both plain text and HTML body parts are present.
+// Three thematic breaks frame a bold label so AI agents and humans can
+// unambiguously identify the boundary and understand what follows.
+const HTML_BODY_SEPARATOR =
+  '\n\n---\n---\n---\n\n' +
+  '**[html-body below - automatically converted from HTML; may contain formatting loss or artifacts]**' +
+  '\n\n---\n---\n---\n\n'
+
 export function assembleDocument(
   parsed: ParsedMail,
   rawSource: Buffer | string,
   folderPath: string,
 ): string {
-  const frontmatter = buildFrontmatter(parsed, rawSource, folderPath)
-
-  const subject = parsed.subject ?? ''
-  const subjectHeading = subject.length > 0
-    ? subject + '\n' + '='.repeat(subject.length)
-    : ''
-
   // mailparser auto-generates text from html and vice versa — check the raw
   // content-type to determine which parts were explicitly present
   const unfolded = parseHeaderBlock(rawSource)
@@ -419,6 +430,17 @@ export function assembleDocument(
 
   const hasHtml = !isTopLevelTextOnly && typeof parsed.html === 'string' && parsed.html.length > 0
   const hasText = !isTopLevelHtmlOnly && typeof parsed.text === 'string' && parsed.text.length > 0
+
+  const formats: string[] = []
+  if (hasText) formats.push('plaintext')
+  if (hasHtml) formats.push('html')
+
+  const frontmatter = buildFrontmatter(parsed, rawSource, folderPath, formats)
+
+  const subject = parsed.subject ?? ''
+  const subjectHeading = subject.length > 0
+    ? subject + '\n' + '='.repeat(subject.length)
+    : ''
 
   const header = subjectHeading ? frontmatter + '\n\n' + subjectHeading : frontmatter
 
@@ -434,14 +456,13 @@ export function assembleDocument(
     return header + '\n\n' + convertPlainText(parsed.text as string)
   }
 
-  // Both HTML and plain text
-  const divider = '\n\n---\n\n---\n\n---\n\n'
+  // Both present: plain text first (canonical), then HTML conversion
   return (
     header +
     '\n\n' +
-    htmlToMarkdown(parsed.html as string) +
-    divider +
-    convertPlainText(parsed.text as string)
+    convertPlainText(parsed.text as string) +
+    HTML_BODY_SEPARATOR +
+    htmlToMarkdown(parsed.html as string)
   )
 }
 
