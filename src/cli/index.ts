@@ -402,7 +402,7 @@ program
       })
 
       const partialTag = result.errors > 0 ? ' [partial]' : ''
-      console.log(`export${partialTag}: ${result.exported} exported / ${result.skipped} skipped`)
+      console.log(`export${partialTag}: ${result.exported} exported / ${result.skipped} skipped / ${result.removed} removed`)
 
       for (const fr of result.folderResults) {
         if (fr.error) {

@@ -21,6 +21,7 @@ export interface ExportOptions {
 export interface ExportResult {
   exported: number
   skipped: number
+  removed: number
   errors: number
   folderResults: FolderExportResult[]
 }
@@ -29,6 +30,7 @@ export interface FolderExportResult {
   path: string
   exported: number
   skipped: number
+  removed: number
   error?: Error
 }
 
@@ -515,7 +517,7 @@ export async function exportFolder(
   folderPath: string,
   opts: { verbose?: boolean; force?: boolean; onLog?: (m: string) => void },
 ): Promise<FolderExportResult> {
-  const result: FolderExportResult = { path: folderPath, exported: 0, skipped: 0 }
+  const result: FolderExportResult = { path: folderPath, exported: 0, skipped: 0, removed: 0 }
 
   const stateFilePath = path.join(archivePath, folderPath, '.backmail_state.json')
   let state: FolderState
@@ -529,6 +531,23 @@ export async function exportFolder(
 
   const outDir = path.join(exportPath, folderPath)
   await fs.mkdir(outDir, { recursive: true })
+
+  // Remove orphaned .md files (no matching entry in state)
+  const knownStems = new Set(state.messages.map((m) => m.filename))
+  try {
+    const existing = await fs.readdir(outDir)
+    for (const entry of existing) {
+      if (!entry.endsWith('.md')) continue
+      const stem = entry.slice(0, -3)
+      if (!knownStems.has(stem)) {
+        await fs.unlink(path.join(outDir, entry))
+        result.removed++
+        if (opts.verbose) opts.onLog?.(`removed ${folderPath}/${entry}`)
+      }
+    }
+  } catch {
+    // outDir may not exist yet on the very first run — nothing to clean up
+  }
 
   for (const msg of state.messages) {
     const emlPath = path.join(archivePath, folderPath, `${msg.filename}.eml`)
@@ -576,6 +595,7 @@ export async function exportAccount(
   const folderResults: FolderExportResult[] = []
   let totalExported = 0
   let totalSkipped = 0
+  let totalRemoved = 0
   let totalErrors = 0
 
   for (const folder of folders) {
@@ -587,8 +607,9 @@ export async function exportAccount(
     folderResults.push(fr)
     totalExported += fr.exported
     totalSkipped += fr.skipped
+    totalRemoved += fr.removed
     if (fr.error) totalErrors++
   }
 
-  return { exported: totalExported, skipped: totalSkipped, errors: totalErrors, folderResults }
+  return { exported: totalExported, skipped: totalSkipped, removed: totalRemoved, errors: totalErrors, folderResults }
 }

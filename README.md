@@ -276,18 +276,18 @@ Output is written to `export/` next to `archive/`, mirroring the folder structur
 - Plain text body (when present)
 - HTML body converted to Markdown, preceded by a labelled separator block (when both parts are present — layout tables are unwrapped to prose, external images stripped, inline attachments preserved)
 
-By default `export` is incremental — a `.md` file is skipped if it is already newer than its source `.eml`. Use `--force` to re-export everything regardless.
+By default `export` is incremental — a `.md` file is skipped if it is already newer than its source `.eml`, and orphaned `.md` files (whose source message was removed from the archive) are deleted. Use `--force` to re-export everything regardless.
 
 Output:
 
 ```
-export: 42 exported / 1204 skipped
+export: 42 exported / 1204 skipped / 3 removed
 ```
 
 If any message fails the export continues and the summary line is tagged `[partial]`:
 
 ```
-export [partial]: 38 exported / 0 skipped
+export [partial]: 38 exported / 0 skipped / 0 removed
 folder INBOX/Archive failed: read error
 ```
 

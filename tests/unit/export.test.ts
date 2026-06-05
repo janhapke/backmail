@@ -765,6 +765,23 @@ describe('exportFolder', () => {
     expect(result.skipped).toBe(0)
     expect(await fsp.readFile(mdPath, 'utf-8')).not.toBe('existing content')
   })
+
+  it('removes orphaned .md files not present in state', async () => {
+    const archivePath = path.join(tmpDir, 'archive')
+    const exportPath = path.join(tmpDir, 'export')
+    const folderDir = path.join(archivePath, 'INBOX')
+    const outDir = path.join(exportPath, 'INBOX')
+    await fsp.mkdir(folderDir, { recursive: true })
+    await fsp.mkdir(outDir, { recursive: true })
+    await fsp.writeFile(path.join(folderDir, '.backmail_state.json'), makeState([{ filename: '2026-01-01_kept_abc12345' }]))
+    await fsp.writeFile(path.join(folderDir, '2026-01-01_kept_abc12345.eml'), SIMPLE_EML)
+    // Pre-existing orphaned .md with no matching state entry
+    await fsp.writeFile(path.join(outDir, '2026-01-01_orphan_deadbeef.md'), 'orphan')
+
+    const result = await exportFolder(archivePath, exportPath, 'INBOX', {})
+    expect(result.removed).toBe(1)
+    await expect(fsp.access(path.join(outDir, '2026-01-01_orphan_deadbeef.md'))).rejects.toThrow()
+  })
 })
 
 describe('exportAccount', () => {
@@ -798,6 +815,7 @@ describe('exportAccount', () => {
     const result = await exportAccount(archivePath, exportPath, {})
     expect(result.exported).toBe(2)
     expect(result.skipped).toBe(0)
+    expect(result.removed).toBe(0)
     expect(result.errors).toBe(0)
     expect(result.folderResults).toHaveLength(2)
   })

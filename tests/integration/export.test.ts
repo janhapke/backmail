@@ -115,6 +115,15 @@ describe('exportAccount integration', () => {
     expect(result.skipped).toBe(0)
   })
 
+  it('removes orphaned .md files when source message is gone', async () => {
+    const orphanPath = path.join(exportPath, 'FolderA', 'orphaned_file.md')
+    await fs.writeFile(orphanPath, 'orphan')
+
+    const result = await exportAccount(archivePath, exportPath, {})
+    expect(result.removed).toBe(1)
+    await expect(fs.access(orphanPath)).rejects.toThrow()
+  })
+
   it('--only-folder: only specified folder is in output', async () => {
     const onlyExportPath = path.join(tmpDir, 'export-only')
     await exportAccount(archivePath, onlyExportPath, { onlyFolders: ['FolderA'] })
