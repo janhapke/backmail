@@ -56,6 +56,26 @@ export function preprocessHtml(html: string): string {
 // Layout tables (no <th> in first row, or role="presentation") are unwrapped to
 // prose. Data tables (first row all <th>) are kept as GFM pipe tables.
 
+// Block-level tags that indicate a <th> is being used for layout rather than
+// as a data column header. A genuine header cell contains short inline text.
+const BLOCK_TAGS = new Set(['table', 'div', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'ul', 'ol', 'blockquote', 'img', 'figure'])
+
+function cellHasBlockContent(cell: any): boolean {
+  function walk(node: any): boolean {
+    if (node.nodeType !== 1) return false
+    if (BLOCK_TAGS.has((node.nodeName as string).toLowerCase())) return true
+    for (const child of Array.from(node.childNodes as Iterable<any>)) {
+      if (walk(child)) return true
+    }
+    return false
+  }
+  for (const child of Array.from(cell.childNodes as Iterable<any>)) {
+    if (walk(child)) return true
+  }
+  return false
+}
+
 function tableHasHeadingRow(table: any): boolean {
   if (typeof table.getAttribute === 'function' && table.getAttribute('role') === 'presentation') {
     return false
@@ -67,6 +87,8 @@ function tableHasHeadingRow(table: any): boolean {
     if (child.nodeType !== 1) continue
     cellCount++
     if (child.nodeName !== 'TH') return false
+    // A <th> containing block-level elements is a layout cell, not a data header
+    if (cellHasBlockContent(child)) return false
   }
   return cellCount > 0
 }
@@ -154,9 +176,14 @@ export function htmlToMarkdown(html: string): string {
   configureSmartTableRules(td)
   let md = td.turndown(cleaned)
 
-  // (a) Replace Unicode non-breaking / decorative spaces with plain space
-  md = md.replace(/[\u00a0\u1680\u2002\u2003\u2009\u200a\u202f]/g, ' ')
-  // (b) Trim trailing whitespace from every line
+  // (a) Strip invisible characters that may have been decoded from HTML entities
+  //     by the DOM parser inside Turndown (e.g. &#847; \u2192 U+034F, &shy; \u2192 U+00AD).
+  //     Mirrors the preprocessHtml strip but catches entity-encoded variants.
+  md = md.replace(/[\u00ad\u034f\u200b\u200c\u200d\ufeff]/g, '')
+  // (b) Replace Unicode non-breaking / decorative spaces with plain space.
+  //     U+2007 FIGURE SPACE (&#8199;) is the main culprit in preheader padding divs.
+  md = md.replace(/[\u00a0\u1680\u2002\u2003\u2007\u2008\u2009\u200a\u202f\u205f\u3000]/g, ' ')
+  // (c) Trim trailing whitespace from every line (also collapses space-only lines to empty)
   md = md.replace(/[ \t]+$/gm, '')
   // (e) Remove links with empty or whitespace-only text \u2014 these come from <a> tags
   //     that wrapped images or content we stripped (tracking links, logo anchors).

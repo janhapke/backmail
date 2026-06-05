@@ -74,6 +74,16 @@ describe('htmlToMarkdown', () => {
     expect(result).toContain('Hello World')
   })
 
+  it('strips entity-encoded invisible chars and figure spaces that survive preprocessHtml', () => {
+    // &#8199; = U+2007 figure space, &#847; = U+034F CGJ, &shy; = U+00AD soft hyphen
+    const html = '<div>&#8199;&#847; &#8199;&#847; &shy; &shy;</div><p>Body</p>'
+    const result = htmlToMarkdown(html)
+    expect(result).not.toContain('\u2007')
+    expect(result).not.toContain('\u034f')
+    // The padding div should collapse to nothing, leaving only the body
+    expect(result.trim()).toBe('Body')
+  })
+
   it('trims trailing whitespace from lines', () => {
     const result = htmlToMarkdown('<p>Hello   </p><p>World</p>')
     expect(result).not.toMatch(/[ \t]+\n/)
@@ -171,6 +181,21 @@ describe('htmlToMarkdown', () => {
       const result = htmlToMarkdown(html)
       expect(result).not.toContain('|')
       expect(result).toContain('Inner')
+    })
+
+    it('unwraps a layout table that uses <th> for layout (cells contain block content)', () => {
+      // Newsletters often use <th> for two-column grids — these are layout tables,
+      // not data tables, and should be unwrapped to prose, not rendered as pipe tables.
+      const html = `<table>
+        <tr>
+          <th><img src="cid:a.jpg" alt="A"><p>Left text</p></th>
+          <th><img src="cid:b.jpg" alt="B"><p>Right text</p></th>
+        </tr>
+      </table>`
+      const result = htmlToMarkdown(html)
+      expect(result).not.toContain('|')
+      expect(result).toContain('Left text')
+      expect(result).toContain('Right text')
     })
 
     it('preserves a data table nested inside a layout table', () => {
