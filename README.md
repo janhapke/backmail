@@ -264,7 +264,7 @@ backmail export --exclude-folder Spam --verbose
 |--------|-------------|
 | `--exclude-folder <name>` | Skip a folder (repeatable) |
 | `--only-folder <name>` | Restrict to a folder (repeatable) |
-| `--verbose` | Log one line per exported file |
+| `--verbose` | Log one line per exported or removed file |
 | `--force` | Re-export all messages and overwrite existing files |
 
 `--exclude-folder` and `--only-folder` are mutually exclusive.
