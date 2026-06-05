@@ -268,10 +268,10 @@ backmail export --exclude-folder Spam --verbose
 
 Output is written to `export/` next to `archive/`, mirroring the folder structure. Each file contains:
 
-- YAML frontmatter with `messageId`, `from`, `to`, `subject`, `receivedDate`, `folders`, and `attachments`
+- YAML frontmatter with `messageId`, `from`, `to`, `subject`, `received`, `folders`, `formats`, and `attachments`
 - The subject as a top-level heading
-- HTML body converted to Markdown (layout tables unwrapped to prose, external images stripped, inline attachments preserved)
-- Plain text body appended after a triple horizontal-rule divider (when both parts are present)
+- Plain text body (when present)
+- HTML body converted to Markdown, preceded by a labelled separator block (when both parts are present — layout tables are unwrapped to prose, external images stripped, inline attachments preserved)
 
 Running `export` again is idempotent — existing files are overwritten with identical content.
 
