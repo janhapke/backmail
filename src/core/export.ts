@@ -221,17 +221,19 @@ interface ConvertedLine {
 const ATX_HEADING_RE = /^[ ]{0,3}#{1,6}([ \t]|$)/
 
 function classifyLine(line: string): ConvertedLine {
-  if (line === '') return { out: '', isBlock: false, isDivider: false }
+  // Whitespace-only lines (tabs, spaces) count as blank lines — they must not
+  // trigger hard-break markers on the line before them.
+  if (line === '' || /^\s+$/.test(line)) return { out: '', isBlock: false, isDivider: false }
   if (DIVIDER_RE.test(line)) return { out: '---', isBlock: false, isDivider: true }
-  if (MANUAL_LIST_RE.test(line)) return { out: escapeHtml(line), isBlock: true, isDivider: false }
+  if (MANUAL_LIST_RE.test(line)) return { out: escapeHtml(line).trimEnd(), isBlock: true, isDivider: false }
   // Blockquote lines (email quote marker >) are treated as block elements so they
   // neither receive nor trigger hard-break markers on adjacent lines.
-  if (line.startsWith('>')) return { out: escapeHtml(line), isBlock: true, isDivider: false }
+  if (line.startsWith('>')) return { out: escapeHtml(line).trimEnd(), isBlock: true, isDivider: false }
   // Escape the # to prevent ATX heading interpretation, preserving any leading spaces
   const escaped = ATX_HEADING_RE.test(line)
     ? escapeHtml(line).replace(/^([ ]{0,3})(#{1,6})/, '$1\\$2')
     : escapeHtml(line)
-  return { out: escaped, isBlock: false, isDivider: false }
+  return { out: escaped.trimEnd(), isBlock: false, isDivider: false }
 }
 
 export function convertPlainText(text: string): string {

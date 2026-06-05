@@ -283,6 +283,22 @@ describe('convertPlainText', () => {
     expect(result).not.toContain('&gt;')
   })
 
+  it('treats whitespace-only lines as blank — does not add \\ to preceding line', () => {
+    // Plain-text emails often use tab-only lines as separators between content blocks.
+    // They should not trigger hard-break markers on the line before them.
+    const text = 'USA / New York\n\t\nLive dabei'
+    const result = convertPlainText(text)
+    expect(result).not.toContain('\\')
+    expect(result).toContain('USA / New York')
+    expect(result).toContain('Live dabei')
+  })
+
+  it('does not emit whitespace-only lines — collapses them to empty', () => {
+    const text = 'Line A\n\t\n\t\nLine B'
+    const result = convertPlainText(text)
+    expect(result).not.toMatch(/^\t/m)
+  })
+
   it('does not add hard-break \\ to blockquote lines', () => {
     const text = '> Quoted line one\n> Quoted line two'
     const result = convertPlainText(text)
